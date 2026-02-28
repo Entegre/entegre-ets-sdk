@@ -38,6 +38,34 @@ export interface LineInput {
   exemptionReason?: string;
   /** Muafiyet kodu */
   exemptionReasonCode?: string;
+  /** İndirim tutarı */
+  discountAmount?: number;
+  /** İndirim oranı (%) */
+  discountRate?: number;
+}
+
+/**
+ * Tevkifat (Withholding) bilgisi
+ */
+export interface WithholdingInfo {
+  /** Tevkifat oranı (örn: 5/10 için 50, 9/10 için 90) */
+  rate: number;
+  /** Tevkifat sebebi kodu */
+  reasonCode?: string;
+  /** Tevkifat sebebi */
+  reason?: string;
+}
+
+/**
+ * Genel indirim bilgisi
+ */
+export interface DiscountInfo {
+  /** İndirim tutarı */
+  amount?: number;
+  /** İndirim oranı (%) */
+  rate?: number;
+  /** İndirim açıklaması */
+  reason?: string;
 }
 
 /**
@@ -78,8 +106,14 @@ export interface CalculatedTotals {
   lineTotal: number;
   /** Toplam KDV */
   totalVat: number;
+  /** Toplam indirim */
+  totalDiscount: number;
+  /** Tevkifat tutarı */
+  withholdingAmount: number;
   /** Genel toplam (KDV dahil) */
   grandTotal: number;
+  /** Ödenecek tutar (tevkifat düşülmüş) */
+  payableAmount: number;
   /** Vergi detayları (kod bazında gruplu) */
   taxBreakdown: Map<string, { taxName: string; rate: number; base: number; amount: number }>;
 }
@@ -140,6 +174,8 @@ export class InvoiceBuilder {
   private lines: DocumentLine[] = [];
   private targetCustomer?: TargetCustomer;
   private isDraft: boolean = false;
+  private withholding?: WithholdingInfo;
+  private generalDiscount?: DiscountInfo;
 
   private constructor() {
     // Varsayılan tarih: bugün
@@ -254,12 +290,69 @@ export class InvoiceBuilder {
   }
 
   /**
+   * Tevkifat bilgisi ekler
+   * @param rate - Tevkifat oranı (örn: 5/10 için 50, 9/10 için 90)
+   * @param reasonCode - Tevkifat sebebi kodu
+   * @param reason - Tevkifat sebebi açıklaması
+   *
+   * @example
+   * ```typescript
+   * builder.withWithholding(90, '603', 'Güvenlik Hizmetleri')
+   * ```
+   */
+  withWithholding(rate: number, reasonCode?: string, reason?: string): InvoiceBuilder {
+    this.withholding = { rate, reasonCode, reason };
+    this.invoiceType = 'TEVKIFAT';
+    if (reason) {
+      this.withNote(`Tevkifat: ${reason} (${rate / 10}/10)`);
+    }
+    return this;
+  }
+
+  /**
+   * Genel indirim ekler (tüm faturaya uygulanır)
+   * @param amount - İndirim tutarı
+   * @param reason - İndirim sebebi
+   */
+  withDiscountAmount(amount: number, reason?: string): InvoiceBuilder {
+    this.generalDiscount = { amount, reason };
+    if (reason) {
+      this.withNote(`İndirim: ${reason}`);
+    }
+    return this;
+  }
+
+  /**
+   * Genel indirim oranı ekler (tüm faturaya uygulanır)
+   * @param rate - İndirim oranı (%)
+   * @param reason - İndirim sebebi
+   */
+  withDiscountRate(rate: number, reason?: string): InvoiceBuilder {
+    this.generalDiscount = { rate, reason };
+    if (reason) {
+      this.withNote(`İndirim: %${rate} - ${reason}`);
+    }
+    return this;
+  }
+
+  /**
    * Fatura satırı ekler
    */
   addLine(input: LineInput): InvoiceBuilder {
     const vatRate = input.vatRate ?? 20;
-    const lineExtension = input.quantity * input.price;
-    const taxAmount = this.roundCurrency(lineExtension * (vatRate / 100));
+    let lineExtension = input.quantity * input.price;
+
+    // Satır indirimi uygula
+    let lineDiscount = 0;
+    if (input.discountAmount) {
+      lineDiscount = input.discountAmount;
+    } else if (input.discountRate) {
+      lineDiscount = this.roundCurrency(lineExtension * (input.discountRate / 100));
+    }
+
+    // İndirim sonrası tutar
+    const lineExtensionAfterDiscount = lineExtension - lineDiscount;
+    const taxAmount = this.roundCurrency(lineExtensionAfterDiscount * (vatRate / 100));
 
     const line: DocumentLine = {
       ItemCode: input.itemCode,
@@ -269,7 +362,7 @@ export class InvoiceBuilder {
       IsoUnitCode: input.unitCode || UNIT_CODES.ADET,
       CurrencyId: this.currency,
       Price: input.price,
-      LineExtensionAmount: lineExtension,
+      LineExtensionAmount: lineExtensionAfterDiscount,
       Taxes: [
         {
           TaxCode: input.taxCode || TAX_CODES.KDV,
@@ -281,6 +374,11 @@ export class InvoiceBuilder {
         },
       ],
     };
+
+    // Satır indirimi metadata olarak sakla
+    if (lineDiscount > 0) {
+      (line as DocumentLine & { _discount?: number })._discount = lineDiscount;
+    }
 
     this.lines.push(line);
     return this;
@@ -300,11 +398,16 @@ export class InvoiceBuilder {
   calculateTotals(): CalculatedTotals {
     let lineTotal = 0;
     let totalVat = 0;
+    let totalLineDiscount = 0;
     const taxBreakdown = new Map<string, { taxName: string; rate: number; base: number; amount: number }>();
 
     for (const line of this.lines) {
       const lineAmount = line.LineExtensionAmount || 0;
       lineTotal += lineAmount;
+
+      // Satır indirimleri
+      const lineDiscount = (line as DocumentLine & { _discount?: number })._discount || 0;
+      totalLineDiscount += lineDiscount;
 
       if (line.Taxes) {
         for (const tax of line.Taxes) {
@@ -328,10 +431,38 @@ export class InvoiceBuilder {
       }
     }
 
+    // Genel indirim hesapla
+    let generalDiscountAmount = 0;
+    if (this.generalDiscount) {
+      if (this.generalDiscount.amount) {
+        generalDiscountAmount = this.generalDiscount.amount;
+      } else if (this.generalDiscount.rate) {
+        generalDiscountAmount = this.roundCurrency(lineTotal * (this.generalDiscount.rate / 100));
+      }
+    }
+
+    const totalDiscount = totalLineDiscount + generalDiscountAmount;
+
+    // KDV dahil toplam
+    const grandTotal = this.roundCurrency(lineTotal + totalVat);
+
+    // Tevkifat hesapla
+    let withholdingAmount = 0;
+    if (this.withholding) {
+      // Tevkifat KDV üzerinden hesaplanır
+      withholdingAmount = this.roundCurrency(totalVat * (this.withholding.rate / 100));
+    }
+
+    // Ödenecek tutar
+    const payableAmount = this.roundCurrency(grandTotal - withholdingAmount);
+
     return {
       lineTotal: this.roundCurrency(lineTotal),
       totalVat: this.roundCurrency(totalVat),
-      grandTotal: this.roundCurrency(lineTotal + totalVat),
+      totalDiscount: this.roundCurrency(totalDiscount),
+      withholdingAmount,
+      grandTotal,
+      payableAmount,
       taxBreakdown,
     };
   }
@@ -355,15 +486,19 @@ export class InvoiceBuilder {
       Notes: this.notes.length > 0 ? this.notes : undefined,
       SupplierParty: this.supplier!,
       CustomerParty: this.customer!,
-      DocumentLines: this.lines,
+      DocumentLines: this.lines.map((line) => {
+        // _discount field'ını kaldır
+        const { _discount, ...cleanLine } = line as DocumentLine & { _discount?: number };
+        return cleanLine;
+      }),
       LegalMonetaryTotal: {
         LineExtensionAmount: totals.lineTotal,
         TaxExclusiveAmount: totals.lineTotal,
         TaxIncludedAmount: totals.grandTotal,
-        AllowanceTotalAmount: 0,
-        PayableAmount: totals.grandTotal,
+        AllowanceTotalAmount: totals.totalDiscount,
+        PayableAmount: totals.payableAmount,
       },
-      TaxTotals: this.buildTaxTotals(totals.taxBreakdown),
+      TaxTotals: this.buildTaxTotals(totals.taxBreakdown, totals.withholdingAmount),
     };
 
     return {
@@ -419,7 +554,10 @@ export class InvoiceBuilder {
     return party;
   }
 
-  private buildTaxTotals(taxBreakdown: Map<string, { taxName: string; rate: number; base: number; amount: number }>): Tax[] {
+  private buildTaxTotals(
+    taxBreakdown: Map<string, { taxName: string; rate: number; base: number; amount: number }>,
+    withholdingAmount: number = 0
+  ): Tax[] {
     const taxes: Tax[] = [];
 
     taxBreakdown.forEach((value, key) => {
@@ -431,6 +569,18 @@ export class InvoiceBuilder {
         TaxAmount: this.roundCurrency(value.amount),
       });
     });
+
+    // Tevkifat varsa ekle
+    if (withholdingAmount > 0 && this.withholding) {
+      taxes.push({
+        TaxCode: TAX_CODES.KDV_TEVKIFAT,
+        TaxName: 'KDV Tevkifatı',
+        Percent: this.withholding.rate,
+        TaxAmount: withholdingAmount,
+        ExemptionReasonCode: this.withholding.reasonCode,
+        ExemptionReason: this.withholding.reason,
+      });
+    }
 
     return taxes;
   }

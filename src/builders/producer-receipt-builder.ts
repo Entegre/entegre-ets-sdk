@@ -201,10 +201,15 @@ export class ProducerReceiptBuilder {
       }
     }
 
+    const grandTotal = this.roundCurrency(lineTotal - totalVat); // Müstahsilde stopaj düşülür
+
     return {
       lineTotal: this.roundCurrency(lineTotal),
       totalVat: this.roundCurrency(totalVat),
-      grandTotal: this.roundCurrency(lineTotal - totalVat), // Müstahsilde stopaj düşülür
+      totalDiscount: 0,
+      withholdingAmount: this.roundCurrency(totalVat),
+      grandTotal,
+      payableAmount: grandTotal,
       taxBreakdown,
     };
   }

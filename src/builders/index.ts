@@ -4,6 +4,8 @@ export {
   type LineInput,
   type PartyInput,
   type CalculatedTotals,
+  type WithholdingInfo,
+  type DiscountInfo,
 } from './invoice-builder';
 
 export {

@@ -460,6 +460,217 @@ const allRates = await client.getAllExchangeRates('2024-01-15');
 | `getExchangeRate(currency, date)` | Tek kur |
 | `getAllExchangeRates(date)` | Tüm kurlar |
 
+## İndirim ve Tevkifat
+
+```typescript
+import { createInvoice, WITHHOLDING_CODES } from '@entegre/ets-sdk';
+
+// Satır indirimi
+const invoice = createInvoice()
+  .withSupplier({ taxId: '1234567890', name: 'Satıcı' })
+  .withCustomer({ taxId: '9876543210', name: 'Alıcı' })
+  .addLine({
+    itemCode: '001',
+    itemName: 'Ürün',
+    quantity: 10,
+    price: 100,
+    vatRate: 20,
+    discountRate: 10  // %10 satır indirimi
+  })
+  .build();
+
+// Genel indirim
+const invoiceWithDiscount = createInvoice()
+  .withDiscountAmount(500, 'Kampanya indirimi')  // 500 TL indirim
+  // veya
+  .withDiscountRate(5, 'Yıl sonu indirimi')  // %5 genel indirim
+  .build();
+
+// Tevkifatlı fatura
+const withholdingInvoice = createInvoice()
+  .withSupplier({ taxId: '1234567890', name: 'Satıcı' })
+  .withCustomer({ taxId: '9876543210', name: 'Alıcı' })
+  .withWithholding(90, '603', 'Güvenlik Hizmetleri')  // 9/10 tevkifat
+  .addLine({
+    itemCode: '001',
+    itemName: 'Güvenlik Hizmeti',
+    quantity: 1,
+    price: 10000,
+    vatRate: 20
+  })
+  .build();
+
+// Hesaplanan toplamlar:
+// - Satır toplamı: 10000 TRY
+// - KDV: 2000 TRY
+// - Tevkifat: 1800 TRY (KDV'nin %90'ı)
+// - Ödenecek: 10200 TRY (12000 - 1800)
+
+// Hazır tevkifat kodları
+const codes = WITHHOLDING_CODES.GUVENLIK;  // { code: '603', reason: 'Güvenlik Hizmetleri', rate: 90 }
+```
+
+## Şablonlar (Templates)
+
+```typescript
+import {
+  salesInvoiceTemplate,
+  returnInvoiceTemplate,
+  withholdingInvoiceTemplate,
+  exportInvoiceTemplate,
+  EXEMPTION_CODES,
+  WITHHOLDING_CODES
+} from '@entegre/ets-sdk';
+
+// Satış faturası şablonu
+const salesInvoice = salesInvoiceTemplate(
+  { taxId: '1234567890', name: 'Satıcı' },
+  { taxId: '9876543210', name: 'Alıcı' },
+  [{ itemCode: '001', itemName: 'Ürün', quantity: 1, price: 100 }],
+  { date: '2024-01-15', currency: 'TRY' }
+);
+
+// İade faturası
+const returnInvoice = returnInvoiceTemplate(
+  supplier, customer, lines,
+  'ABC2024000000001',  // İade edilen fatura no
+  { date: '2024-01-20' }
+);
+
+// Tevkifatlı fatura
+const withholding = withholdingInvoiceTemplate(
+  supplier, customer, lines,
+  { withholdingRate: WITHHOLDING_CODES.TEMIZLIK.rate }  // 9/10
+);
+
+// İhracat faturası
+const exportInv = exportInvoiceTemplate(
+  supplier, customer, lines,
+  { currency: 'USD', deliveryTerms: 'FOB' }
+);
+```
+
+## XML Parser
+
+```typescript
+import { parseInvoiceXml, parseBase64InvoiceXml, toInvoice } from '@entegre/ets-sdk';
+
+// XML string'den parse
+const parsed = parseInvoiceXml(xmlString);
+console.log('UUID:', parsed.uuid);
+console.log('Fatura No:', parsed.invoiceNumber);
+console.log('Satıcı:', parsed.supplier?.PartyName);
+console.log('Toplam:', parsed.totals?.PayableAmount);
+
+// Base64 encoded XML
+const parsedFromBase64 = parseBase64InvoiceXml(base64Content);
+
+// Invoice tipine dönüştürme
+const invoice = toInvoice(parsed);
+```
+
+## Retry Mekanizması
+
+```typescript
+import { withRetry } from '@entegre/ets-sdk';
+
+// Otomatik yeniden deneme
+const result = await withRetry(
+  () => client.sendInvoice(request),
+  {
+    maxRetries: 3,
+    initialDelay: 1000,
+    backoffMultiplier: 2,
+    onRetry: (error, attempt, delay) => {
+      console.log(`Deneme ${attempt}, ${delay}ms sonra tekrar...`);
+    }
+  }
+);
+```
+
+## Rate Limiting
+
+```typescript
+import { RateLimiter, createRateLimiter, RATE_LIMIT_PRESETS } from '@entegre/ets-sdk';
+
+// Preset kullanarak
+const limiter = createRateLimiter('STANDARD');  // 60 istek/dakika
+
+// Özel konfigürasyon
+const customLimiter = new RateLimiter({
+  maxRequests: 100,
+  windowMs: 60 * 1000,  // 1 dakika
+  strategy: 'wait'  // 'throw' veya 'wait'
+});
+
+// Kullanım
+await limiter.acquire();  // Rate limit bekle
+const result = await client.sendInvoice(request);
+
+// Veya
+const result = await limiter.execute(() => client.sendInvoice(request));
+```
+
+## Caching
+
+```typescript
+import { userCache, exchangeRateCache, MemoryCache } from '@entegre/ets-sdk';
+
+// Mükellef cache'i (30 dakika varsayılan)
+userCache.cacheUser('1234567890', true, ['alias1', 'alias2']);
+const user = userCache.getUser('1234567890');
+
+// Döviz kuru cache'i (1 saat varsayılan)
+exchangeRateCache.cacheRate('USD', '2024-01-15', 30.5);
+const rate = exchangeRateCache.getRate('USD', '2024-01-15');
+
+// Özel cache
+const myCache = new MemoryCache<MyData>({
+  defaultTtl: 5 * 60 * 1000,  // 5 dakika
+  maxSize: 1000,
+  namespace: 'my-cache'
+});
+
+myCache.set('key', data);
+const cached = myCache.get('key');
+
+// Lazy loading
+const data = await myCache.getOrSet('key', async () => {
+  return await fetchData();
+});
+```
+
+## Logging / Debug
+
+```typescript
+import { setDebugMode, createLogger, LogLevel, logger } from '@entegre/ets-sdk';
+
+// Debug modunu aç
+setDebugMode(true);
+
+// Global logger kullan
+logger.debug('Debug mesajı', { extra: 'data' });
+logger.info('Bilgi mesajı');
+logger.warn('Uyarı');
+logger.error('Hata', { error: err });
+
+// Özel logger oluştur
+const myLogger = createLogger('MyModule', {
+  level: LogLevel.DEBUG,
+  maskSensitiveData: true
+});
+
+myLogger.info('İşlem başladı');
+myLogger.debug('Request', { password: 'secret' });  // password maskelenir
+
+// HTTP logger
+import { HttpLogger } from '@entegre/ets-sdk';
+
+const httpLogger = new HttpLogger();
+httpLogger.request('POST', '/api/invoice', { data });
+httpLogger.response('POST', '/api/invoice', 200, 150, { result });
+```
+
 ## Sabitler
 
 ```typescript

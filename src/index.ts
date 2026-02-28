@@ -146,6 +146,8 @@ export {
   type PartyInput,
   type CalculatedTotals,
   type DispatchLineInput,
+  type WithholdingInfo,
+  type DiscountInfo,
 } from './builders';
 
 // Validation
@@ -163,3 +165,66 @@ export {
   type FieldError,
   type ValidationResult,
 } from './validation';
+
+// Templates
+export {
+  salesInvoiceTemplate,
+  returnInvoiceTemplate,
+  withholdingInvoiceTemplate,
+  exemptionInvoiceTemplate,
+  exportInvoiceTemplate,
+  eArchivePersonTemplate,
+  commercialInvoiceTemplate,
+  specialBaseInvoiceTemplate,
+  EXEMPTION_CODES,
+  WITHHOLDING_CODES,
+  type TemplateOptions,
+  type WithholdingTemplateOptions,
+  type ExemptionTemplateOptions,
+} from './templates';
+
+// Parser
+export {
+  parseInvoiceXml,
+  parseBase64InvoiceXml,
+  toInvoice,
+  isInvoiceXml,
+  isDispatchXml,
+  type ParsedInvoice,
+} from './parser';
+
+// Utilities
+export {
+  // Retry
+  withRetry,
+  isRetryableError,
+  calculateDelay,
+  type RetryConfig,
+
+  // Cache
+  MemoryCache,
+  UserCache,
+  ExchangeRateCache,
+  userCache,
+  exchangeRateCache,
+  clearAllCaches,
+  type CacheConfig,
+
+  // Rate Limiter
+  RateLimiter,
+  SlidingWindowRateLimiter,
+  RateLimitError,
+  createRateLimiter,
+  RATE_LIMIT_PRESETS,
+  type RateLimiterConfig,
+
+  // Logger
+  Logger,
+  HttpLogger,
+  LogLevel,
+  logger,
+  setDebugMode,
+  createLogger,
+  type LoggerConfig,
+  type LogEntry,
+} from './utils';
