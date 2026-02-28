@@ -1,25 +1,12 @@
 # @entegre/ets-sdk
 
-[![GitHub Packages](https://img.shields.io/badge/GitHub%20Packages-v1.0.0-blue)](https://github.com/orgs/Entegre/packages/npm/package/ets-sdk)
+[![npm version](https://img.shields.io/npm/v/@entegre/ets-sdk.svg)](https://www.npmjs.com/package/@entegre/ets-sdk)
+[![npm downloads](https://img.shields.io/npm/dm/@entegre/ets-sdk.svg)](https://www.npmjs.com/package/@entegre/ets-sdk)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Entegre ETS API için TypeScript/JavaScript SDK. E-Fatura, E-Arşiv, E-İrsaliye ve E-Müstahsil işlemlerini kolayca yapmanızı sağlar.
 
 ## Kurulum
-
-Bu paket GitHub Packages üzerinde yayınlanmıştır.
-
-### 1. GitHub Packages Yapılandırması
-
-Projenizin kök dizininde `.npmrc` dosyası oluşturun:
-
-```
-@entegre:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN
-```
-
-> **Not:** GitHub token'ınız `read:packages` iznine sahip olmalıdır. Token oluşturmak için: [GitHub Settings > Tokens](https://github.com/settings/tokens)
-
-### 2. Paketi Yükleyin
 
 ```bash
 npm install @entegre/ets-sdk
