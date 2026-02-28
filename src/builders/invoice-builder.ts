@@ -1,0 +1,468 @@
+import type {
+  Invoice,
+  InvoiceRequest,
+  InvoiceTypeCode,
+  InvoiceProfileId,
+  Party,
+  DocumentLine,
+  Tax,
+  TargetCustomer,
+  Address,
+  Person,
+} from '../types';
+import { TAX_CODES, UNIT_CODES } from '../constants';
+
+/**
+ * Satır ekleme için basitleştirilmiş tip
+ */
+export interface LineInput {
+  /** Ürün kodu */
+  itemCode: string;
+  /** Ürün adı */
+  itemName: string;
+  /** Açıklama */
+  description?: string;
+  /** Miktar */
+  quantity: number;
+  /** Birim kodu (varsayılan: C62 - Adet) */
+  unitCode?: string;
+  /** Birim fiyat */
+  price: number;
+  /** KDV oranı (varsayılan: 20) */
+  vatRate?: number;
+  /** Vergi kodu (varsayılan: 0015 - KDV) */
+  taxCode?: string;
+  /** Vergi adı (varsayılan: KDV) */
+  taxName?: string;
+  /** Muafiyet sebebi */
+  exemptionReason?: string;
+  /** Muafiyet kodu */
+  exemptionReasonCode?: string;
+}
+
+/**
+ * Taraf ekleme için basitleştirilmiş tip
+ */
+export interface PartyInput {
+  /** VKN veya TCKN */
+  taxId: string;
+  /** Firma/kişi adı */
+  name: string;
+  /** Vergi dairesi */
+  taxOffice?: string;
+  /** Alias */
+  alias?: string;
+  /** Ülke */
+  country?: string;
+  /** Şehir */
+  city?: string;
+  /** İlçe */
+  district?: string;
+  /** Adres */
+  address?: string;
+  /** Bina no */
+  buildingNo?: string;
+  /** Posta kodu */
+  postalCode?: string;
+  /** Ad (gerçek kişi için) */
+  firstName?: string;
+  /** Soyad (gerçek kişi için) */
+  lastName?: string;
+}
+
+/**
+ * Hesaplanmış toplamlar
+ */
+export interface CalculatedTotals {
+  /** Satır toplamı (KDV hariç) */
+  lineTotal: number;
+  /** Toplam KDV */
+  totalVat: number;
+  /** Genel toplam (KDV dahil) */
+  grandTotal: number;
+  /** Vergi detayları (kod bazında gruplu) */
+  taxBreakdown: Map<string, { taxName: string; rate: number; base: number; amount: number }>;
+}
+
+/**
+ * Fatura oluşturucu (Builder Pattern)
+ *
+ * @example
+ * ```typescript
+ * const invoice = InvoiceBuilder.create()
+ *   .withType('SATIS')
+ *   .withProfile('TEMELFATURA')
+ *   .withDate('2024-01-15')
+ *   .withCurrency('TRY')
+ *   .withSupplier({
+ *     taxId: '1234567890',
+ *     name: 'Satıcı Firma',
+ *     taxOffice: 'Kadıköy VD',
+ *     city: 'İstanbul'
+ *   })
+ *   .withCustomer({
+ *     taxId: '9876543210',
+ *     name: 'Alıcı Firma',
+ *     taxOffice: 'Çankaya VD'
+ *   })
+ *   .addLine({
+ *     itemCode: 'URUN-001',
+ *     itemName: 'Yazılım Lisansı',
+ *     quantity: 1,
+ *     price: 1000,
+ *     vatRate: 20
+ *   })
+ *   .addLine({
+ *     itemCode: 'URUN-002',
+ *     itemName: 'Destek Hizmeti',
+ *     quantity: 12,
+ *     price: 100,
+ *     vatRate: 20
+ *   })
+ *   .withNote('Fatura notu')
+ *   .build();
+ *
+ * // Toplamlar otomatik hesaplanır:
+ * // - Satır toplamı: 2200 TRY
+ * // - KDV: 440 TRY
+ * // - Genel toplam: 2640 TRY
+ * ```
+ */
+export class InvoiceBuilder {
+  private invoiceId?: string;
+  private invoiceType: InvoiceTypeCode | string = 'SATIS';
+  private profileId: InvoiceProfileId | string = 'TEMELFATURA';
+  private issueDate: string;
+  private currency: string = 'TRY';
+  private notes: string[] = [];
+  private supplier?: Party;
+  private customer?: Party;
+  private lines: DocumentLine[] = [];
+  private targetCustomer?: TargetCustomer;
+  private isDraft: boolean = false;
+
+  private constructor() {
+    // Varsayılan tarih: bugün
+    this.issueDate = new Date().toISOString().split('T')[0];
+  }
+
+  /**
+   * Yeni bir InvoiceBuilder oluşturur
+   */
+  static create(): InvoiceBuilder {
+    return new InvoiceBuilder();
+  }
+
+  /**
+   * Fatura numarası belirler
+   */
+  withId(id: string): InvoiceBuilder {
+    this.invoiceId = id;
+    return this;
+  }
+
+  /**
+   * Fatura tipini belirler
+   * @param type - SATIS, IADE, TEVKIFAT, ISTISNA, OZELMATRAH, IHRACKAYITLI
+   */
+  withType(type: InvoiceTypeCode | string): InvoiceBuilder {
+    this.invoiceType = type;
+    return this;
+  }
+
+  /**
+   * Fatura profilini belirler
+   * @param profile - TEMELFATURA, TICARIFATURA, IHRACAT, YOLCUBERABERI, EARSIVFATURA
+   */
+  withProfile(profile: InvoiceProfileId | string): InvoiceBuilder {
+    this.profileId = profile;
+    return this;
+  }
+
+  /**
+   * Fatura tarihini belirler
+   * @param date - YYYY-MM-DD formatında tarih
+   */
+  withDate(date: string): InvoiceBuilder {
+    this.issueDate = date;
+    return this;
+  }
+
+  /**
+   * Para birimini belirler
+   * @param currency - TRY, USD, EUR, vb.
+   */
+  withCurrency(currency: string): InvoiceBuilder {
+    this.currency = currency;
+    return this;
+  }
+
+  /**
+   * Taslak olarak işaretler
+   */
+  asDraft(): InvoiceBuilder {
+    this.isDraft = true;
+    return this;
+  }
+
+  /**
+   * Not ekler
+   */
+  withNote(note: string): InvoiceBuilder {
+    this.notes.push(note);
+    return this;
+  }
+
+  /**
+   * Birden fazla not ekler
+   */
+  withNotes(notes: string[]): InvoiceBuilder {
+    this.notes.push(...notes);
+    return this;
+  }
+
+  /**
+   * Gönderici (satıcı) bilgilerini belirler
+   */
+  withSupplier(input: PartyInput): InvoiceBuilder {
+    this.supplier = this.buildParty(input);
+    return this;
+  }
+
+  /**
+   * Alıcı (müşteri) bilgilerini belirler
+   */
+  withCustomer(input: PartyInput): InvoiceBuilder {
+    this.customer = this.buildParty(input);
+
+    // Otomatik olarak TargetCustomer da ayarla
+    this.targetCustomer = {
+      PartyName: input.name,
+      PartyIdentification: input.taxId,
+      Alias: input.alias,
+    };
+
+    return this;
+  }
+
+  /**
+   * Hedef müşteri bilgilerini ayrıca belirler (opsiyonel)
+   */
+  withTargetCustomer(target: TargetCustomer): InvoiceBuilder {
+    this.targetCustomer = target;
+    return this;
+  }
+
+  /**
+   * Fatura satırı ekler
+   */
+  addLine(input: LineInput): InvoiceBuilder {
+    const vatRate = input.vatRate ?? 20;
+    const lineExtension = input.quantity * input.price;
+    const taxAmount = this.roundCurrency(lineExtension * (vatRate / 100));
+
+    const line: DocumentLine = {
+      ItemCode: input.itemCode,
+      ItemName: input.itemName,
+      Description: input.description,
+      InvoicedQuantity: input.quantity,
+      IsoUnitCode: input.unitCode || UNIT_CODES.ADET,
+      CurrencyId: this.currency,
+      Price: input.price,
+      LineExtensionAmount: lineExtension,
+      Taxes: [
+        {
+          TaxCode: input.taxCode || TAX_CODES.KDV,
+          TaxName: input.taxName || 'KDV',
+          Percent: vatRate,
+          TaxAmount: taxAmount,
+          ExemptionReason: input.exemptionReason,
+          ExemptionReasonCode: input.exemptionReasonCode,
+        },
+      ],
+    };
+
+    this.lines.push(line);
+    return this;
+  }
+
+  /**
+   * Birden fazla satır ekler
+   */
+  addLines(inputs: LineInput[]): InvoiceBuilder {
+    inputs.forEach((input) => this.addLine(input));
+    return this;
+  }
+
+  /**
+   * Toplamları hesaplar (build öncesi önizleme için)
+   */
+  calculateTotals(): CalculatedTotals {
+    let lineTotal = 0;
+    let totalVat = 0;
+    const taxBreakdown = new Map<string, { taxName: string; rate: number; base: number; amount: number }>();
+
+    for (const line of this.lines) {
+      const lineAmount = line.LineExtensionAmount || 0;
+      lineTotal += lineAmount;
+
+      if (line.Taxes) {
+        for (const tax of line.Taxes) {
+          totalVat += tax.TaxAmount;
+
+          const key = `${tax.TaxCode}-${tax.Percent}`;
+          const existing = taxBreakdown.get(key);
+
+          if (existing) {
+            existing.base += lineAmount;
+            existing.amount += tax.TaxAmount;
+          } else {
+            taxBreakdown.set(key, {
+              taxName: tax.TaxName,
+              rate: tax.Percent,
+              base: lineAmount,
+              amount: tax.TaxAmount,
+            });
+          }
+        }
+      }
+    }
+
+    return {
+      lineTotal: this.roundCurrency(lineTotal),
+      totalVat: this.roundCurrency(totalVat),
+      grandTotal: this.roundCurrency(lineTotal + totalVat),
+      taxBreakdown,
+    };
+  }
+
+  /**
+   * Fatura nesnesini oluşturur
+   */
+  build(): InvoiceRequest {
+    this.validate();
+
+    const totals = this.calculateTotals();
+
+    const invoice: Invoice = {
+      IsDraft: this.isDraft,
+      InvoiceId: this.invoiceId,
+      InvoiceTypeCode: this.invoiceType,
+      ProfileId: this.profileId,
+      IssueDate: this.issueDate,
+      DocumentCurrencyCode: this.currency,
+      CurrencyId: this.currency,
+      Notes: this.notes.length > 0 ? this.notes : undefined,
+      SupplierParty: this.supplier!,
+      CustomerParty: this.customer!,
+      DocumentLines: this.lines,
+      LegalMonetaryTotal: {
+        LineExtensionAmount: totals.lineTotal,
+        TaxExclusiveAmount: totals.lineTotal,
+        TaxIncludedAmount: totals.grandTotal,
+        AllowanceTotalAmount: 0,
+        PayableAmount: totals.grandTotal,
+      },
+      TaxTotals: this.buildTaxTotals(totals.taxBreakdown),
+    };
+
+    return {
+      Invoice: invoice,
+      TargetCustomer: this.targetCustomer,
+    };
+  }
+
+  /**
+   * E-Arşiv faturası olarak oluşturur
+   */
+  buildAsArchive(sendingType: 'ELEKTRONIK' | 'KAGIT' = 'ELEKTRONIK', isInternetSales: boolean = false) {
+    const request = this.build();
+
+    return {
+      ...request,
+      ArchiveInfo: {
+        SendingType: sendingType,
+        IsInternetSales: isInternetSales,
+      },
+    };
+  }
+
+  // ==================== PRIVATE METHODS ====================
+
+  private buildParty(input: PartyInput): Party {
+    const address: Address = {};
+
+    if (input.country) address.Country = input.country;
+    if (input.city) address.CityName = input.city;
+    if (input.district) address.CitySubdivisionName = input.district;
+    if (input.address) address.StreetName = input.address;
+    if (input.buildingNo) address.BuildingNumber = input.buildingNo;
+    if (input.postalCode) address.PostalZone = input.postalCode;
+
+    const party: Party = {
+      PartyIdentification: input.taxId,
+      PartyName: input.name,
+      PartyTaxScheme: input.taxOffice,
+      Alias: input.alias,
+      Address: Object.keys(address).length > 0 ? address : undefined,
+    };
+
+    // Gerçek kişi bilgileri
+    if (input.firstName || input.lastName) {
+      const person: Person = {
+        FirstName: input.firstName || '',
+        FamilyName: input.lastName || '',
+      };
+      party.Person = person;
+    }
+
+    return party;
+  }
+
+  private buildTaxTotals(taxBreakdown: Map<string, { taxName: string; rate: number; base: number; amount: number }>): Tax[] {
+    const taxes: Tax[] = [];
+
+    taxBreakdown.forEach((value, key) => {
+      const [taxCode] = key.split('-');
+      taxes.push({
+        TaxCode: taxCode,
+        TaxName: value.taxName,
+        Percent: value.rate,
+        TaxAmount: this.roundCurrency(value.amount),
+      });
+    });
+
+    return taxes;
+  }
+
+  private roundCurrency(value: number): number {
+    return Math.round(value * 100) / 100;
+  }
+
+  private validate(): void {
+    const errors: string[] = [];
+
+    if (!this.supplier) {
+      errors.push('Gönderici (supplier) bilgisi gerekli');
+    }
+
+    if (!this.customer) {
+      errors.push('Alıcı (customer) bilgisi gerekli');
+    }
+
+    if (this.lines.length === 0) {
+      errors.push('En az bir fatura satırı gerekli');
+    }
+
+    if (errors.length > 0) {
+      throw new Error(`Fatura doğrulama hatası:\n- ${errors.join('\n- ')}`);
+    }
+  }
+}
+
+/**
+ * Hızlı fatura oluşturucu factory fonksiyonu
+ */
+export function createInvoice(): InvoiceBuilder {
+  return InvoiceBuilder.create();
+}

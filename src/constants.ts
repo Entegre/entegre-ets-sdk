@@ -66,6 +66,8 @@ export const TAX_CODES = {
   KONAKLAMA: '0059',
   /** Tevkifatlı KDV */
   KDV_TEVKIFAT: '9015',
+  /** Stopaj (Gelir Vergisi Kesintisi) */
+  STOPAJ: '0003',
 } as const;
 
 /**

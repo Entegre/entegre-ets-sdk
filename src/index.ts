@@ -133,3 +133,33 @@ export {
   CURRENCIES,
   INTEGRATORS,
 } from './constants';
+
+// Builders
+export {
+  InvoiceBuilder,
+  createInvoice,
+  DispatchBuilder,
+  createDispatch,
+  ProducerReceiptBuilder,
+  createProducerReceipt,
+  type LineInput,
+  type PartyInput,
+  type CalculatedTotals,
+  type DispatchLineInput,
+} from './builders';
+
+// Validation
+export {
+  validateVKN,
+  validateTCKN,
+  validateTaxId,
+  validateDate,
+  validateCurrency,
+  validateEmail,
+  validateIBAN,
+  validatePositiveNumber,
+  combineValidations,
+  Validator,
+  type FieldError,
+  type ValidationResult,
+} from './validation';

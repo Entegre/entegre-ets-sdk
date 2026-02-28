@@ -1,6 +1,6 @@
 {
   "name": "@entegre/ets-sdk",
-  "version": "1.0.1",
+  "version": "1.2.0",
   "description": "Entegre ETS API SDK - E-Fatura, E-Arsiv, E-Irsaliye, E-Mustahsil için TypeScript/JavaScript SDK",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -49,7 +49,8 @@
     "url": "https://github.com/Entegre/entegre-ets-sdk/issues"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
   },
   "dependencies": {
     "axios": "^1.6.0"
