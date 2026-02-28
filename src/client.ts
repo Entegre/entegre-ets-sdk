@@ -23,6 +23,11 @@ import type {
   ProducerReceiptRequest,
   ProducerReceiptResult,
   ProducerReceiptStatus,
+  IncomingInvoice,
+  IncomingInvoiceListQuery,
+  IncomingInvoiceListResponse,
+  InvoiceResponseRequest,
+  InvoiceResponseResult,
 } from './types';
 
 /**
@@ -217,6 +222,84 @@ export class EtsClient {
    */
   async getInvoicePdf(uuid: string): Promise<ApiResponse<PdfResult>> {
     return this.post(`/invoice/${uuid}/pdf`);
+  }
+
+  // ==================== GELEN FATURALAR ====================
+
+  /**
+   * Gelen faturaları listeler.
+   *
+   * @param query - Sorgu parametreleri
+   *
+   * @example
+   * ```typescript
+   * const result = await client.getIncomingInvoices({
+   *   startDate: '2024-01-01',
+   *   endDate: '2024-01-31',
+   *   status: 'WAITING'
+   * });
+   * console.log('Bekleyen faturalar:', result.data?.invoices);
+   * ```
+   */
+  async getIncomingInvoices(query: IncomingInvoiceListQuery = {}): Promise<ApiResponse<IncomingInvoiceListResponse>> {
+    return this.post('/invoice/incoming', query);
+  }
+
+  /**
+   * Tek bir gelen faturayı getirir.
+   *
+   * @param uuid - Fatura UUID'si
+   */
+  async getIncomingInvoice(uuid: string): Promise<ApiResponse<IncomingInvoice>> {
+    return this.post(`/invoice/incoming/${uuid}`);
+  }
+
+  /**
+   * Gelen faturayı kabul eder.
+   *
+   * @param uuid - Fatura UUID'si
+   * @param note - Kabul notu (opsiyonel)
+   */
+  async acceptInvoice(uuid: string, note?: string): Promise<ApiResponse<InvoiceResponseResult>> {
+    const request: InvoiceResponseRequest = {
+      responseType: 'KABUL',
+      note,
+    };
+    return this.post(`/invoice/incoming/${uuid}/respond`, request);
+  }
+
+  /**
+   * Gelen faturayı reddeder.
+   *
+   * @param uuid - Fatura UUID'si
+   * @param reason - Red sebebi (zorunlu)
+   * @param note - Ek not (opsiyonel)
+   */
+  async rejectInvoice(uuid: string, reason: string, note?: string): Promise<ApiResponse<InvoiceResponseResult>> {
+    const request: InvoiceResponseRequest = {
+      responseType: 'RED',
+      reason,
+      note,
+    };
+    return this.post(`/invoice/incoming/${uuid}/respond`, request);
+  }
+
+  /**
+   * Gelen fatura PDF'ini indirir.
+   *
+   * @param uuid - Fatura UUID'si
+   */
+  async getIncomingInvoicePdf(uuid: string): Promise<ApiResponse<PdfResult>> {
+    return this.post(`/invoice/incoming/${uuid}/pdf`);
+  }
+
+  /**
+   * Gelen fatura XML'ini indirir.
+   *
+   * @param uuid - Fatura UUID'si
+   */
+  async getIncomingInvoiceXml(uuid: string): Promise<ApiResponse<{ xml: string }>> {
+    return this.post(`/invoice/incoming/${uuid}/xml`);
   }
 
   // ==================== E-ARSIV ====================

@@ -106,7 +106,20 @@ export type {
   ProducerReceiptRequest,
   ProducerReceiptResult,
   ProducerReceiptStatus,
+
+  // Incoming Invoice
+  IncomingInvoice,
+  IncomingParty,
+  IncomingInvoiceLine,
+  IncomingInvoiceListQuery,
+  IncomingInvoiceListResponse,
+  InvoiceResponseRequest,
+  InvoiceResponseResult,
+  IncomingInvoiceStatus,
 } from './types';
+
+// Incoming Invoice Status Constants
+export { INCOMING_INVOICE_STATUS } from './types';
 
 // Enums
 export { InvoiceStatusCode } from './types';
@@ -182,6 +195,13 @@ export {
   type WithholdingTemplateOptions,
   type ExemptionTemplateOptions,
 } from './templates';
+
+// Invoice Templates (Quick Builders)
+export {
+  InvoiceTemplates,
+  WithholdingCodes,
+  ExemptionCodes,
+} from './templates/invoice-templates';
 
 // Parser
 export {

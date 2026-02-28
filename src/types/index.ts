@@ -64,3 +64,17 @@ export type {
   ProducerReceiptResult,
   ProducerReceiptStatus,
 } from './producer';
+
+// Incoming invoice types
+export type {
+  IncomingInvoice,
+  IncomingParty,
+  IncomingInvoiceLine,
+  IncomingInvoiceListQuery,
+  IncomingInvoiceListResponse,
+  InvoiceResponseRequest,
+  InvoiceResponseResult,
+  IncomingInvoiceStatus,
+} from './incoming';
+
+export { INCOMING_INVOICE_STATUS } from './incoming';

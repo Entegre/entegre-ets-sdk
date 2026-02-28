@@ -304,6 +304,96 @@ inbox.data?.items.forEach(inv => {
 });
 ```
 
+### Gelen Fatura Yönetimi (v1.5.0+)
+
+```typescript
+import { INCOMING_INVOICE_STATUS } from '@entegre/ets-sdk';
+
+// Gelen faturaları listele
+const result = await client.getIncomingInvoices({
+  startDate: '2024-01-01',
+  endDate: '2024-01-31',
+  status: 'WAITING'  // WAITING, ACCEPTED, REJECTED, AUTO_ACCEPTED
+});
+
+console.log('Toplam:', result.data?.totalCount);
+result.data?.invoices.forEach(inv => {
+  console.log(`${inv.invoiceNumber} - ${inv.sender.name} - ${inv.payableAmount} TRY`);
+  console.log(`Yanıt son tarihi: ${inv.responseDeadline}`);
+});
+
+// Tek fatura detayı
+const invoice = await client.getIncomingInvoice(uuid);
+console.log('Satırlar:', invoice.data?.lines);
+
+// Faturayı kabul et
+await client.acceptInvoice(uuid, 'Fatura kontrol edildi, uygun');
+
+// Faturayı reddet
+await client.rejectInvoice(uuid, 'Fatura tutarı hatalı', 'Ek not');
+
+// PDF ve XML indir
+const pdf = await client.getIncomingInvoicePdf(uuid);
+const xml = await client.getIncomingInvoiceXml(uuid);
+```
+
+### Hızlı Fatura Şablonları (v1.5.0+)
+
+```typescript
+import { InvoiceTemplates, WithholdingCodes, ExemptionCodes } from '@entegre/ets-sdk';
+
+// Perakende satış (E-Arşiv)
+const retailInvoice = InvoiceTemplates.retail()
+  .withSupplier({ taxId: '1234567890', name: 'Satıcı' })
+  .withCustomer({ taxId: '12345678901', name: 'Müşteri' })
+  .addLine({ itemCode: '001', itemName: 'Ürün', quantity: 1, price: 100 })
+  .build();
+
+// B2B Ticari Fatura
+const b2bInvoice = InvoiceTemplates.b2b()
+  .withSupplier(supplier)
+  .withCustomer(customer)
+  .addLines(lines)
+  .build();
+
+// İhracat faturası (USD)
+const exportInvoice = InvoiceTemplates.exportUsd()
+  .withSupplier(supplier)
+  .withCustomer(foreignCustomer)
+  .addLine({ itemCode: 'EXP-001', itemName: 'Export Product', quantity: 10, price: 50 })
+  .build();
+
+// Tevkifatlı fatura - Güvenlik (9/10)
+const securityInvoice = InvoiceTemplates.withholdingSecurity()
+  .withSupplier(supplier)
+  .withCustomer(customer)
+  .addLine({ itemCode: '001', itemName: 'Güvenlik Hizmeti', quantity: 1, price: 10000 })
+  .build();
+
+// Mevcut şablonlar:
+// InvoiceTemplates.retail()              - Perakende (E-Arşiv)
+// InvoiceTemplates.b2b()                 - B2B Ticari
+// InvoiceTemplates.basic()               - Temel Fatura
+// InvoiceTemplates.service()             - Hizmet Faturası
+// InvoiceTemplates.exportUsd()           - İhracat (USD)
+// InvoiceTemplates.exportEur()           - İhracat (EUR)
+// InvoiceTemplates.return()              - İade Faturası
+// InvoiceTemplates.withholdingSecurity() - Tevkifat: Güvenlik (9/10)
+// InvoiceTemplates.withholdingCleaning() - Tevkifat: Temizlik (9/10)
+// InvoiceTemplates.withholdingPersonnel()- Tevkifat: Personel (9/10)
+// InvoiceTemplates.withholdingConstruction() - Tevkifat: Yapım (4/10)
+// InvoiceTemplates.withholdingCatering() - Tevkifat: Yemek (5/10)
+// InvoiceTemplates.sgk()                 - SGK Faturası
+// InvoiceTemplates.proforma()            - Proforma (Taslak)
+
+// Tevkifat kodları
+console.log(WithholdingCodes.SECURITY);  // { rate: 90, code: '603', reason: 'Güvenlik Hizmetleri' }
+console.log(WithholdingCodes.CLEANING);  // { rate: 90, code: '602', reason: 'Temizlik Hizmetleri' }
+
+// İstisna kodları
+console.log(ExemptionCodes.GOODS_EXPORT);  // { code: '301', reason: 'Mal İhracatı' }
+```
+
 ### PDF İndirme
 
 ```typescript

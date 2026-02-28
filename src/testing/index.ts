@@ -11,6 +11,11 @@ import type {
   UserCheckResult,
   UserAliasResult,
   ApiResponse,
+  IncomingInvoice,
+  IncomingInvoiceListQuery,
+  IncomingInvoiceListResponse,
+  InvoiceResponseResult,
+  PdfResult,
 } from '../types';
 
 /**
@@ -247,6 +252,110 @@ export class MockEtsClient {
       invoiceNumber: receiptNumber,
       status: 'SENT',
     });
+  }
+
+  // ==================== INCOMING INVOICES ====================
+
+  private incomingInvoices: Map<string, IncomingInvoice> = new Map();
+
+  async getIncomingInvoices(query: IncomingInvoiceListQuery = {}): Promise<ApiResponse<IncomingInvoiceListResponse>> {
+    await this.simulate();
+
+    let invoices = Array.from(this.incomingInvoices.values());
+
+    // Apply filters
+    if (query.status) {
+      invoices = invoices.filter(inv => inv.status === query.status);
+    }
+    if (query.senderTaxId) {
+      invoices = invoices.filter(inv => inv.sender.taxId === query.senderTaxId);
+    }
+    if (query.startDate) {
+      invoices = invoices.filter(inv => inv.invoiceDate >= query.startDate!);
+    }
+    if (query.endDate) {
+      invoices = invoices.filter(inv => inv.invoiceDate <= query.endDate!);
+    }
+
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const start = (page - 1) * pageSize;
+    const paged = invoices.slice(start, start + pageSize);
+
+    return this.response({
+      invoices: paged,
+      totalCount: invoices.length,
+      page,
+      pageSize,
+      totalPages: Math.ceil(invoices.length / pageSize),
+    });
+  }
+
+  async getIncomingInvoice(uuid: string): Promise<ApiResponse<IncomingInvoice>> {
+    await this.simulate();
+
+    const invoice = this.incomingInvoices.get(uuid);
+    if (!invoice) {
+      throw new Error(`Incoming invoice not found: ${uuid}`);
+    }
+
+    return this.response(invoice);
+  }
+
+  async acceptInvoice(uuid: string, note?: string): Promise<ApiResponse<InvoiceResponseResult>> {
+    await this.simulate();
+
+    const invoice = this.incomingInvoices.get(uuid);
+    if (invoice) {
+      invoice.status = 'ACCEPTED';
+    }
+
+    return this.response({
+      uuid,
+      responseType: 'KABUL',
+      responseDate: new Date().toISOString(),
+      envelopeUuid: this.config.uuidGenerator(),
+    });
+  }
+
+  async rejectInvoice(uuid: string, reason: string, note?: string): Promise<ApiResponse<InvoiceResponseResult>> {
+    await this.simulate();
+
+    const invoice = this.incomingInvoices.get(uuid);
+    if (invoice) {
+      invoice.status = 'REJECTED';
+    }
+
+    return this.response({
+      uuid,
+      responseType: 'RED',
+      responseDate: new Date().toISOString(),
+      envelopeUuid: this.config.uuidGenerator(),
+    });
+  }
+
+  async getIncomingInvoicePdf(uuid: string): Promise<ApiResponse<PdfResult>> {
+    await this.simulate();
+
+    return this.response({
+      pdfContent: 'JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyA+PgplbmRvYmoKdHJhaWxlcgo8PCAvUm9vdCAxIDAgUiA+PgolJUVPRg==',
+      fileName: `${uuid}.pdf`,
+    });
+  }
+
+  async getIncomingInvoiceXml(uuid: string): Promise<ApiResponse<{ xml: string }>> {
+    await this.simulate();
+
+    return this.response({
+      xml: '<?xml version="1.0"?><Invoice><UUID>' + uuid + '</UUID></Invoice>',
+    });
+  }
+
+  /**
+   * Test için gelen fatura ekler
+   */
+  addIncomingInvoice(invoice: IncomingInvoice): void {
+    this.incomingInvoices.set(invoice.uuid, invoice);
   }
 
   // ==================== TEST HELPERS ====================
