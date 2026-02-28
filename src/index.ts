@@ -299,3 +299,28 @@ export {
   type InvoiceDiffResult,
   type DiffOptions,
 } from './diff';
+
+// Health Check
+export {
+  EtsHealthCheck,
+  createHealthCheck,
+  createHealthCheckHandler,
+  type HealthCheckResult,
+  type HealthCheckEntry,
+  type HealthCheckOptions,
+} from './health';
+
+// Telemetry
+export {
+  EtsTelemetry,
+  InMemoryTelemetryCollector,
+  createTelemetry,
+  createMetricsHandler,
+  getGlobalTelemetry,
+  setGlobalTelemetry,
+  type TelemetryCollector,
+  type SpanInfo,
+  type SpanEvent,
+  type MetricInfo,
+  type MetricType,
+} from './telemetry';

@@ -1,6 +1,6 @@
 {
   "name": "@entegre/ets-sdk",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Entegre ETS API SDK - E-Fatura, E-Arsiv, E-Irsaliye, E-Mustahsil için TypeScript/JavaScript SDK",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
