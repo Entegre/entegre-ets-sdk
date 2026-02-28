@@ -228,3 +228,54 @@ export {
   type LoggerConfig,
   type LogEntry,
 } from './utils';
+
+// Webhook
+export {
+  WebhookRouter,
+  createWebhookRouter,
+  createWebhookHandler,
+  verifyWebhookSignature,
+  parseWebhookPayload,
+  validateTimestamp,
+  type WebhookEventType,
+  type WebhookPayload,
+  type WebhookHandler,
+  type WebhookConfig,
+} from './webhook';
+
+// Batch Operations
+export {
+  BatchExecutor,
+  BatchInvoiceSender,
+  BatchDispatchSender,
+  processBatch,
+  parallelLimit,
+  createBatchSender,
+  type BatchResult,
+  type BatchItemResult,
+  type BatchConfig,
+} from './batch';
+
+// Testing / Mock
+export {
+  MockEtsClient,
+  createMockClient,
+  fixtures,
+  assertions,
+  generators,
+  type MockConfig,
+} from './testing';
+
+// Invoice Diff
+export {
+  diffInvoices,
+  diffLines,
+  diffParties,
+  formatDiff,
+  formatDiffHtml,
+  groupChanges,
+  type DiffType,
+  type DiffChange,
+  type InvoiceDiffResult,
+  type DiffOptions,
+} from './diff';

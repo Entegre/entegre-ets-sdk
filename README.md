@@ -671,6 +671,190 @@ httpLogger.request('POST', '/api/invoice', { data });
 httpLogger.response('POST', '/api/invoice', 200, 150, { result });
 ```
 
+## CLI Aracı
+
+```bash
+# Kurulum
+npm install -g @entegre/ets-sdk
+
+# Konfigürasyon
+ets-cli config --set baseUrl=https://ets.bulutix.com
+ets-cli config --set integrator=UYM
+
+# Kimlik doğrulama
+ets-cli auth --party-id 1234567890 --username user --password pass
+
+# Mükellef kontrolü
+ets-cli check-user 9876543210
+
+# Fatura gönderme
+ets-cli send invoice.json
+ets-cli send invoice.json --draft
+ets-cli send invoice.json --archive
+
+# Durum sorgulama
+ets-cli status 12345678-1234-1234-1234-123456789012
+
+# Fatura karşılaştırma
+ets-cli diff invoice1.json invoice2.json
+
+# JSON çıktı
+ets-cli check-user 9876543210 --json
+```
+
+## Webhook Handler
+
+```typescript
+import { createWebhookRouter, WebhookRouter } from '@entegre/ets-sdk';
+
+// Router oluştur
+const router = createWebhookRouter({
+  secret: 'webhook-secret',  // Signature doğrulama için
+  timestampTolerance: 5 * 60 * 1000  // 5 dakika
+});
+
+// Event handler'ları
+router.on('invoice.sent', async (payload) => {
+  console.log('Fatura gönderildi:', payload.documentUuid);
+});
+
+router.on('invoice.accepted', async (payload) => {
+  console.log('Fatura kabul edildi:', payload.documentUuid);
+});
+
+router.on('invoice.rejected', async (payload) => {
+  console.log('Fatura reddedildi:', payload.documentUuid, payload.errorMessage);
+});
+
+// Tüm fatura event'leri için
+router.onInvoice(async (payload) => {
+  console.log('Fatura event:', payload.event, payload.documentUuid);
+});
+
+// Wildcard handler
+router.on('*', async (payload) => {
+  console.log('Tüm eventler:', payload.event);
+});
+
+// Express middleware olarak kullan
+app.post('/webhook', router.middleware());
+
+// Manuel kullanım
+const payload = await router.handle(requestBody, requestHeaders);
+```
+
+## Batch İşlemler
+
+```typescript
+import { processBatch, BatchInvoiceSender, createBatchSender } from '@entegre/ets-sdk';
+
+// Generic batch processor
+const results = await processBatch(
+  invoices,
+  async (invoice, index) => {
+    return await client.sendInvoice(invoice);
+  },
+  {
+    concurrency: 5,           // Paralel işlem sayısı
+    continueOnError: true,    // Hata olsa da devam et
+    retries: 2,               // Yeniden deneme
+    onProgress: (completed, total, result) => {
+      console.log(`İlerleme: ${completed}/${total}`);
+    }
+  }
+);
+
+console.log(`Başarılı: ${results.successful}/${results.total}`);
+console.log(`Toplam süre: ${results.duration}ms`);
+
+// Hatalı olanları göster
+results.results
+  .filter(r => !r.success)
+  .forEach(r => console.error(`#${r.index} hata:`, r.error?.message));
+
+// BatchInvoiceSender
+const batchSender = new BatchInvoiceSender(
+  (req) => client.sendInvoice(req),
+  { concurrency: 3 }
+);
+
+const batchResult = await batchSender.send(invoices);
+```
+
+## Test / Mock
+
+```typescript
+import { createMockClient, fixtures, generators, assertions } from '@entegre/ets-sdk';
+
+// Mock client oluştur
+const mockClient = createMockClient({
+  delay: 100,      // API gecikme simülasyonu
+  errorRate: 0.1   // %10 hata oranı
+});
+
+// Test kullanıcısı ekle
+mockClient.addTestUser('1234567890', true, ['alias1']);
+
+// Normal client gibi kullan
+await mockClient.authenticate({
+  partyId: '1234567890',
+  username: 'test',
+  password: 'test'
+});
+
+const result = await mockClient.sendInvoice(request);
+console.log('UUID:', result.data?.uuid);
+
+// Hazır test verileri
+const supplier = fixtures.supplier;
+const customer = fixtures.customer;
+const lines = fixtures.lines;
+
+// Test data generator
+const randomVkn = generators.randomVKN();
+const randomDate = generators.randomRecentDate();
+const randomAmount = generators.randomAmount(100, 10000);
+
+// Assertions
+const isValid = assertions.isValidInvoiceRequest(request);
+const totalsCorrect = assertions.areTotalsCorrect(request);
+```
+
+## Fatura Karşılaştırma (Diff)
+
+```typescript
+import { diffInvoices, formatDiff, formatDiffHtml } from '@entegre/ets-sdk';
+
+// İki faturayı karşılaştır
+const result = diffInvoices(oldInvoice, newInvoice, {
+  ignoreFields: ['Notes', 'IssueDate'],  // Bu alanları ignore et
+  ignoreLineOrder: true,                  // Satır sırasını ignore et
+  floatTolerance: 0.01                    // Sayı karşılaştırma toleransı
+});
+
+if (result.identical) {
+  console.log('Faturalar aynı');
+} else {
+  console.log(`${result.changeCount} değişiklik bulundu`);
+  console.log('Header:', result.summary.headerChanges);
+  console.log('Satırlar:', result.summary.lineChanges);
+  console.log('Toplamlar:', result.summary.totalChanges);
+
+  // Detaylı değişiklikler
+  result.changes.forEach(change => {
+    console.log(`${change.type}: ${change.path}`);
+    console.log(`  Eski: ${JSON.stringify(change.oldValue)}`);
+    console.log(`  Yeni: ${JSON.stringify(change.newValue)}`);
+  });
+}
+
+// Okunabilir format
+console.log(formatDiff(result));
+
+// HTML format
+const html = formatDiffHtml(result);
+```
+
 ## Sabitler
 
 ```typescript
