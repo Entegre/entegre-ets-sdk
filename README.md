@@ -1,10 +1,20 @@
 # @entegre/ets-sdk
 
 [![npm version](https://img.shields.io/npm/v/@entegre/ets-sdk.svg)](https://www.npmjs.com/package/@entegre/ets-sdk)
-[![npm downloads](https://img.shields.io/npm/dm/@entegre/ets-sdk.svg)](https://www.npmjs.com/package/@entegre/ets-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Entegre ETS API için TypeScript/JavaScript SDK. E-Fatura, E-Arşiv, E-İrsaliye ve E-Müstahsil işlemlerini kolayca yapmanızı sağlar.
+
+## Özellikler
+
+- 🚀 **Kolay Entegrasyon** - Builder pattern ile hızlı fatura oluşturma
+- 📦 **TypeScript Desteği** - Tam tip güvenliği
+- 🔄 **Otomatik Hesaplama** - KDV, tevkifat, indirim otomatik
+- 🛡️ **Doğrulama** - VKN/TCKN/IBAN algoritma kontrolü
+- ⚡ **Batch İşlemler** - Toplu fatura gönderimi
+- 🔌 **Webhook** - Status değişikliği bildirimleri
+- 🧪 **Test Araçları** - Mock client ve fixtures
+- 💻 **CLI** - Komut satırı aracı
 
 ## Kurulum
 
@@ -19,50 +29,34 @@ pnpm add @entegre/ets-sdk
 ## Hızlı Başlangıç
 
 ```typescript
-import { EtsClient, UNIT_CODES, TAX_CODES } from '@entegre/ets-sdk';
+import { EtsClient, createInvoice } from '@entegre/ets-sdk';
 
-// Client oluştur
+// 1. Client oluştur
 const client = new EtsClient({
-  baseUrl: 'https://ets.bulutix.com', // varsayılan
-  integrator: 'UYM',
-  softwareId: 'MY-APP'
+  baseUrl: 'https://ets.bulutix.com',
+  integrator: 'UYM'
 });
 
-// Kimlik doğrulama
+// 2. Kimlik doğrula
 await client.authenticate({
   partyId: '1234567890',
   username: 'kullanici',
   password: 'sifre'
 });
 
-// E-Fatura mükellefi kontrolü
-const userCheck = await client.checkEInvoiceUser('9876543210');
-console.log('E-Fatura mükellefi:', userCheck.data?.isActive);
-```
-
-## Builder Pattern ile Kolay Fatura Oluşturma (Önerilen)
-
-```typescript
-import { EtsClient, InvoiceBuilder, createInvoice } from '@entegre/ets-sdk';
-
-// Builder ile fatura oluştur - toplamlar otomatik hesaplanır
-const invoiceRequest = InvoiceBuilder.create()
+// 3. Fatura oluştur (Builder ile)
+const invoice = createInvoice()
   .withType('SATIS')
-  .withProfile('TEMELFATURA')
-  .withDate('2024-01-15')
-  .withCurrency('TRY')
   .withSupplier({
     taxId: '1234567890',
     name: 'Satıcı Firma A.Ş.',
     taxOffice: 'Kadıköy VD',
-    city: 'İstanbul',
-    district: 'Kadıköy'
+    city: 'İstanbul'
   })
   .withCustomer({
     taxId: '9876543210',
     name: 'Alıcı Firma Ltd.',
-    taxOffice: 'Çankaya VD',
-    city: 'Ankara'
+    taxOffice: 'Çankaya VD'
   })
   .addLine({
     itemCode: 'URUN-001',
@@ -71,76 +65,305 @@ const invoiceRequest = InvoiceBuilder.create()
     price: 1000,
     vatRate: 20
   })
+  .build();
+
+// 4. Gönder
+const result = await client.sendInvoice(invoice);
+console.log('UUID:', result.data?.uuid);
+```
+
+---
+
+# 📚 Entegrasyon Rehberi
+
+## İçindekiler
+
+1. [Temel Kavramlar](#temel-kavramlar)
+2. [Kimlik Doğrulama](#kimlik-doğrulama)
+3. [E-Fatura İşlemleri](#e-fatura-i̇şlemleri)
+4. [E-Arşiv İşlemleri](#e-arşiv-i̇şlemleri)
+5. [E-İrsaliye İşlemleri](#e-i̇rsaliye-i̇şlemleri)
+6. [İndirim ve Tevkifat](#i̇ndirim-ve-tevkifat)
+7. [Doğrulama](#doğrulama)
+8. [Hata Yönetimi](#hata-yönetimi)
+9. [Webhook Entegrasyonu](#webhook-entegrasyonu)
+10. [Toplu İşlemler](#toplu-i̇şlemler)
+11. [Test ve Mock](#test-ve-mock)
+12. [CLI Kullanımı](#cli-kullanımı)
+13. [Framework Entegrasyonları](#framework-entegrasyonları)
+
+---
+
+## Temel Kavramlar
+
+### Entegratörler
+
+| Kod | Entegratör |
+|-----|------------|
+| `UYM` | Uyumsoft |
+| `UYK` | Uyumsoft Kurumsal |
+| `IZI` | İzibiz |
+| `DGN` | Doğan E-Dönüşüm |
+| `MYS` | Mysoft |
+
+### Fatura Tipleri
+
+| Tip | Açıklama |
+|-----|----------|
+| `SATIS` | Satış faturası |
+| `IADE` | İade faturası |
+| `TEVKIFAT` | Tevkifatlı fatura |
+| `ISTISNA` | İstisna faturası |
+| `OZELMATRAH` | Özel matrah faturası |
+| `IHRACKAYITLI` | İhraç kayıtlı fatura |
+
+### Fatura Profilleri
+
+| Profil | Açıklama |
+|--------|----------|
+| `TEMELFATURA` | Temel fatura (otomatik kabul) |
+| `TICARIFATURA` | Ticari fatura (kabul/red mekanizmalı) |
+| `IHRACAT` | İhracat faturası |
+| `EARSIVFATURA` | E-Arşiv faturası |
+
+---
+
+## Kimlik Doğrulama
+
+```typescript
+import { EtsClient } from '@entegre/ets-sdk';
+
+const client = new EtsClient({
+  baseUrl: 'https://ets.bulutix.com',  // Varsayılan
+  integrator: 'UYM',                    // Entegratör kodu
+  softwareId: 'MY-APP',                 // Opsiyonel
+  timeout: 30000                        // Opsiyonel (ms)
+});
+
+// Kimlik doğrulama
+const authResult = await client.authenticate({
+  partyId: '1234567890',   // VKN
+  username: 'kullanici',
+  password: 'sifre'
+});
+
+if (authResult.success) {
+  console.log('Token:', authResult.data?.token);
+}
+
+// Token'ı manuel ayarlama (önceden alınmış token için)
+client.setToken('existing-token');
+
+// Token kontrolü
+if (client.isAuthenticated()) {
+  // İşlemlere devam et
+}
+```
+
+### Token Yönetimi (Web App)
+
+```typescript
+// Token'ı session/localStorage'da sakla
+const token = client.getToken();
+localStorage.setItem('ets_token', token);
+
+// Sayfa yenilendiğinde geri yükle
+const savedToken = localStorage.getItem('ets_token');
+if (savedToken) {
+  client.setToken(savedToken);
+}
+```
+
+---
+
+## E-Fatura İşlemleri
+
+### Mükellef Kontrolü
+
+```typescript
+// E-Fatura mükellefi mi?
+const check = await client.checkEInvoiceUser('9876543210');
+if (check.data?.isActive) {
+  console.log('E-Fatura mükellefi');
+} else {
+  console.log('E-Fatura mükellefi değil, E-Arşiv gönderilecek');
+}
+
+// Alias listesi
+const aliases = await client.getUserAliases('9876543210');
+console.log('Alias:', aliases.data?.receiverboxAliases[0]?.alias);
+```
+
+### Fatura Oluşturma (Builder Pattern)
+
+```typescript
+import { createInvoice, UNIT_CODES, TAX_CODES } from '@entegre/ets-sdk';
+
+const invoice = createInvoice()
+  // Temel bilgiler
+  .withType('SATIS')
+  .withProfile('TEMELFATURA')
+  .withDate('2024-01-15')
+  .withCurrency('TRY')
+
+  // Satıcı
+  .withSupplier({
+    taxId: '1234567890',
+    name: 'Satıcı Firma A.Ş.',
+    taxOffice: 'Kadıköy VD',
+    city: 'İstanbul',
+    district: 'Kadıköy',
+    address: 'Örnek Sokak No: 1'
+  })
+
+  // Alıcı
+  .withCustomer({
+    taxId: '9876543210',
+    name: 'Alıcı Firma Ltd.',
+    taxOffice: 'Çankaya VD',
+    city: 'Ankara',
+    alias: 'urn:mail:defaultpk@9876543210'
+  })
+
+  // Ürünler
+  .addLine({
+    itemCode: 'URUN-001',
+    itemName: 'Yazılım Lisansı',
+    quantity: 1,
+    price: 1000,
+    vatRate: 20,
+    unitCode: UNIT_CODES.ADET  // 'C62'
+  })
   .addLine({
     itemCode: 'URUN-002',
-    itemName: 'Destek Hizmeti',
+    itemName: 'Destek Paketi',
     quantity: 12,
     price: 100,
     vatRate: 20
   })
+
+  // Notlar
   .withNote('Fatura notu')
+
   .build();
 
 // Toplamlar otomatik hesaplanır:
-// - Satır toplamı: 2200 TRY
-// - KDV: 440 TRY
-// - Genel toplam: 2640 TRY
+// Satır toplamı: 2200 TRY
+// KDV: 440 TRY
+// Genel toplam: 2640 TRY
+```
 
-// Faturayı gönder
-const result = await client.sendInvoice(invoiceRequest);
+### Fatura Gönderme
+
+```typescript
+// Normal gönderim
+const result = await client.sendInvoice(invoice);
 console.log('UUID:', result.data?.uuid);
+console.log('Fatura No:', result.data?.invoiceNumber);
 
-// E-Arşiv için buildAsArchive() kullanılabilir
-const archiveRequest = InvoiceBuilder.create()
-  // ... aynı zincir
-  .buildAsArchive('ELEKTRONIK', false);
-
-await client.sendEArchiveInvoice(archiveRequest);
+// Taslak olarak gönderim
+const draftResult = await client.sendDraftInvoice(invoice);
 ```
 
-### Alternatif: createInvoice() Factory Fonksiyonu
+### Durum Sorgulama
 
 ```typescript
-const invoice = createInvoice()
-  .withType('SATIS')
-  .withSupplier({ taxId: '1234567890', name: 'Satıcı' })
-  .withCustomer({ taxId: '9876543210', name: 'Alıcı' })
-  .addLine({ itemCode: '001', itemName: 'Ürün', quantity: 1, price: 100 })
-  .build();
+const status = await client.getInvoiceStatus(uuid);
+console.log('Durum:', status.data?.status);
+// SENT, DELIVERED, ACCEPTED, REJECTED, FAILED
 ```
 
-### Toplamları Önizleme
+### Ticari Fatura Yanıtı
 
 ```typescript
-const builder = createInvoice()
-  .addLine({ itemCode: '001', itemName: 'Ürün A', quantity: 2, price: 500, vatRate: 20 })
-  .addLine({ itemCode: '002', itemName: 'Ürün B', quantity: 1, price: 1000, vatRate: 10 });
+// Kabul
+await client.respondInvoice(uuid, {
+  response: 'KABUL',
+  description: 'Fatura kabul edildi'
+});
 
-// Build öncesi toplamları görüntüle
-const totals = builder.calculateTotals();
-console.log('Satır toplamı:', totals.lineTotal);   // 2000
-console.log('Toplam KDV:', totals.totalVat);        // 300 (200 + 100)
-console.log('Genel toplam:', totals.grandTotal);    // 2300
-
-// Vergi detayları
-totals.taxBreakdown.forEach((tax, key) => {
-  console.log(`${tax.taxName} %${tax.rate}: ${tax.amount} TRY`);
+// Red
+await client.respondInvoice(uuid, {
+  response: 'RED',
+  description: 'Fatura bilgileri hatalı'
 });
 ```
 
-## E-İrsaliye Builder
+### Gelen Faturalar
 
 ```typescript
-import { DispatchBuilder, createDispatch } from '@entegre/ets-sdk';
+const inbox = await client.getInboxInvoices({
+  startDate: '2024-01-01',
+  endDate: '2024-01-31',
+  page: 1,
+  pageSize: 20
+});
 
-const dispatchRequest = DispatchBuilder.create()
+inbox.data?.items.forEach(inv => {
+  console.log(inv.invoiceNumber, inv.senderName, inv.payableAmount);
+});
+```
+
+### PDF İndirme
+
+```typescript
+const pdf = await client.getInvoicePdf(uuid);
+if (pdf.data?.pdfContent) {
+  // Base64 decode ve kaydet
+  const buffer = Buffer.from(pdf.data.pdfContent, 'base64');
+  fs.writeFileSync('fatura.pdf', buffer);
+}
+```
+
+---
+
+## E-Arşiv İşlemleri
+
+E-Fatura mükellefi olmayan alıcılar için kullanılır.
+
+```typescript
+// E-Arşiv faturası oluştur
+const archiveInvoice = createInvoice()
+  .withType('SATIS')
+  .withProfile('EARSIVFATURA')
+  .withSupplier({
+    taxId: '1234567890',
+    name: 'Satıcı Firma'
+  })
+  .withCustomer({
+    taxId: '12345678901',  // TCKN
+    name: 'Ahmet Yılmaz',
+    firstName: 'Ahmet',
+    lastName: 'Yılmaz'
+  })
+  .addLine({
+    itemCode: '001',
+    itemName: 'Ürün',
+    quantity: 1,
+    price: 100
+  })
+  .buildAsArchive('ELEKTRONIK', false);  // sendingType, isInternetSales
+
+// Gönder
+const result = await client.sendEArchiveInvoice(archiveInvoice);
+
+// İptal
+await client.cancelEArchive(uuid, '2024-01-16');
+```
+
+---
+
+## E-İrsaliye İşlemleri
+
+```typescript
+import { createDispatch } from '@entegre/ets-sdk';
+
+const dispatch = createDispatch()
   .withType('SEVK')
   .withDate('2024-01-15')
   .withSupplier({
     taxId: '1234567890',
-    name: 'Gönderici Firma',
-    taxOffice: 'Kadıköy VD',
-    city: 'İstanbul'
+    name: 'Gönderici Firma'
   })
   .withCustomer({
     taxId: '9876543210',
@@ -152,53 +375,89 @@ const dispatchRequest = DispatchBuilder.create()
     itemName: 'Ürün',
     quantity: 100
   })
-  .addLine({
-    itemCode: 'URUN-002',
-    itemName: 'Başka Ürün',
-    quantity: 50,
-    unitCode: 'KGM' // Kilogram
-  })
   .build();
 
-await client.sendDispatch(dispatchRequest);
+const result = await client.sendDispatch(dispatch);
 ```
 
-## E-Müstahsil Builder
+---
+
+## İndirim ve Tevkifat
+
+### Satır İndirimi
 
 ```typescript
-import { ProducerReceiptBuilder, createProducerReceipt } from '@entegre/ets-sdk';
-
-const receiptRequest = ProducerReceiptBuilder.create()
-  .withDate('2024-01-15')
-  .withSupplier({
-    taxId: '1234567890',
-    name: 'Alıcı Firma (Makbuzu düzenleyen)',
-    taxOffice: 'Kadıköy VD'
-  })
-  .withCustomer({
-    taxId: '12345678901',
-    firstName: 'Ahmet',
-    lastName: 'Yılmaz',
-    name: 'Ahmet Yılmaz'
-  })
+const invoice = createInvoice()
   .addLine({
-    itemCode: 'TARIM-001',
-    itemName: 'Buğday',
-    quantity: 1000,
-    price: 10,
-    vatRate: 1  // %1 Stopaj
+    itemCode: '001',
+    itemName: 'Ürün',
+    quantity: 10,
+    price: 100,
+    vatRate: 20,
+    discountRate: 10  // %10 indirim
   })
   .build();
 
-// Toplamlar otomatik hesaplanır:
-// - Satır toplamı: 10000 TRY
-// - Stopaj kesintisi: 100 TRY
-// - Ödenecek: 9900 TRY
-
-await client.sendProducerReceipt(receiptRequest);
+// Satır tutarı: 1000 TRY
+// İndirim: 100 TRY
+// İndirimli tutar: 900 TRY
+// KDV: 180 TRY
 ```
 
-## Doğrulama (Validation)
+### Genel İndirim
+
+```typescript
+const invoice = createInvoice()
+  // ... satırlar
+  .withDiscountAmount(500, 'Kampanya indirimi')  // 500 TL
+  // veya
+  .withDiscountRate(5, 'Yıl sonu indirimi')      // %5
+  .build();
+```
+
+### Tevkifat
+
+```typescript
+import { WITHHOLDING_CODES } from '@entegre/ets-sdk';
+
+const invoice = createInvoice()
+  .withSupplier({ taxId: '1234567890', name: 'Satıcı' })
+  .withCustomer({ taxId: '9876543210', name: 'Alıcı' })
+  .withWithholding(
+    WITHHOLDING_CODES.GUVENLIK.rate,  // 90 (9/10)
+    WITHHOLDING_CODES.GUVENLIK.code,  // '603'
+    WITHHOLDING_CODES.GUVENLIK.reason // 'Güvenlik Hizmetleri'
+  )
+  .addLine({
+    itemCode: '001',
+    itemName: 'Güvenlik Hizmeti',
+    quantity: 1,
+    price: 10000,
+    vatRate: 20
+  })
+  .build();
+
+// Satır toplamı: 10000 TRY
+// KDV: 2000 TRY
+// Tevkifat: 1800 TRY (KDV'nin %90'ı)
+// Ödenecek: 10200 TRY
+```
+
+### Hazır Tevkifat Kodları
+
+```typescript
+WITHHOLDING_CODES.YAPIM_ISLERI   // 4/10
+WITHHOLDING_CODES.TEMIZLIK       // 9/10
+WITHHOLDING_CODES.GUVENLIK       // 9/10
+WITHHOLDING_CODES.PERSONEL       // 9/10
+WITHHOLDING_CODES.YEMEK          // 5/10
+WITHHOLDING_CODES.MAKINE_KIRALAMA // 5/10
+WITHHOLDING_CODES.ISGUCU         // 9/10
+```
+
+---
+
+## Doğrulama
 
 ```typescript
 import {
@@ -209,21 +468,19 @@ import {
   Validator
 } from '@entegre/ets-sdk';
 
-// Tek tek doğrulama
+// Tek doğrulama
 const vknResult = validateVKN('1234567890');
 if (!vknResult.valid) {
   console.error('VKN hatası:', vknResult.errors);
 }
 
+// TCKN
 const tcknResult = validateTCKN('12345678901');
-if (!tcknResult.valid) {
-  console.error('TCKN hatası:', tcknResult.errors);
-}
 
-// Otomatik VKN/TCKN tespiti (10 hane = VKN, 11 hane = TCKN)
+// Otomatik (10 hane VKN, 11 hane TCKN)
 const taxIdResult = validateTaxId('1234567890');
 
-// IBAN doğrulama
+// IBAN
 const ibanResult = validateIBAN('TR330006100519786457841326');
 
 // Zincirleme doğrulama
@@ -237,346 +494,71 @@ const result = Validator.create()
   .validate();
 
 if (!result.valid) {
-  console.error('Doğrulama hataları:', result.errors);
+  result.errors.forEach(err => {
+    console.error(`${err.field}: ${err.message}`);
+  });
 }
 
-// Hata varsa exception fırlat
+// Exception fırlat
 Validator.create()
   .taxId(customerTaxId)
   .date(issueDate)
-  .throwIfInvalid();
+  .throwIfInvalid();  // Hata varsa Error fırlatır
 ```
 
-### Doğrulama Fonksiyonları
+---
 
-| Fonksiyon | Açıklama |
-|-----------|----------|
-| `validateVKN(vkn)` | 10 haneli VKN doğrulama (algoritma kontrolü dahil) |
-| `validateTCKN(tckn)` | 11 haneli TCKN doğrulama (algoritma kontrolü dahil) |
-| `validateTaxId(id)` | Otomatik VKN/TCKN tespiti ve doğrulama |
-| `validateDate(date)` | YYYY-MM-DD format kontrolü |
-| `validateCurrency(code)` | ISO 4217 para birimi kontrolü |
-| `validateEmail(email)` | E-posta format kontrolü |
-| `validateIBAN(iban)` | Türkiye IBAN doğrulama (algoritma kontrolü dahil) |
-| `validatePositiveNumber(n)` | Pozitif sayı kontrolü |
-
-## E-Fatura Gönderme (Manuel)
-
-```typescript
-const result = await client.sendInvoice({
-  Invoice: {
-    InvoiceTypeCode: 'SATIS',
-    ProfileId: 'TEMELFATURA',
-    IssueDate: '2024-01-15',
-    DocumentCurrencyCode: 'TRY',
-    SupplierParty: {
-      PartyIdentification: '1234567890',
-      PartyName: 'Satıcı Firma A.Ş.',
-      PartyTaxScheme: 'Kadıköy VD',
-      Address: {
-        Country: 'Türkiye',
-        CityName: 'İstanbul',
-        CitySubdivisionName: 'Kadıköy'
-      }
-    },
-    CustomerParty: {
-      PartyIdentification: '9876543210',
-      PartyName: 'Alıcı Firma Ltd.',
-      PartyTaxScheme: 'Çankaya VD',
-      Address: {
-        Country: 'Türkiye',
-        CityName: 'Ankara',
-        CitySubdivisionName: 'Çankaya'
-      }
-    },
-    DocumentLines: [
-      {
-        ItemCode: 'URUN-001',
-        ItemName: 'Yazılım Lisansı',
-        InvoicedQuantity: 1,
-        IsoUnitCode: UNIT_CODES.ADET, // 'C62'
-        Price: 1000,
-        LineExtensionAmount: 1000,
-        Taxes: [
-          {
-            TaxCode: TAX_CODES.KDV, // '0015'
-            TaxName: 'KDV',
-            Percent: 20,
-            TaxAmount: 200
-          }
-        ]
-      }
-    ],
-    LegalMonetaryTotal: {
-      LineExtensionAmount: 1000,
-      TaxExclusiveAmount: 1000,
-      TaxIncludedAmount: 1200,
-      PayableAmount: 1200
-    },
-    TaxTotals: [
-      {
-        TaxCode: '0015',
-        TaxName: 'KDV',
-        Percent: 20,
-        TaxAmount: 200
-      }
-    ]
-  },
-  TargetCustomer: {
-    PartyName: 'Alıcı Firma Ltd.',
-    PartyIdentification: '9876543210',
-    Alias: 'urn:mail:defaultpk@9876543210'
-  }
-});
-
-console.log('UUID:', result.data?.uuid);
-console.log('Fatura No:', result.data?.invoiceNumber);
-```
-
-## E-Arşiv Fatura Gönderme
-
-```typescript
-const result = await client.sendEArchiveInvoice({
-  Invoice: {
-    // ... fatura bilgileri (yukarıdaki gibi)
-  },
-  TargetCustomer: {
-    PartyName: 'Alıcı Kişi',
-    PartyIdentification: '12345678901', // TCKN
-  },
-  ArchiveInfo: {
-    SendingType: 'ELEKTRONIK', // veya 'KAGIT'
-    IsInternetSales: false
-  }
-});
-```
-
-## E-İrsaliye Gönderme
-
-```typescript
-const result = await client.sendDispatch({
-  Dispatch: {
-    ProfileId: 'TEMELIRSALIYE',
-    IssueDate: '2024-01-15',
-    DispatchTypeCode: 'SEVK',
-    SupplierParty: { /* ... */ },
-    CustomerParty: { /* ... */ },
-    DocumentLines: [
-      {
-        ItemCode: 'URUN-001',
-        ItemName: 'Ürün',
-        InvoicedQuantity: 10,
-        IsoUnitCode: UNIT_CODES.ADET,
-        Price: 100
-      }
-    ]
-  },
-  TargetCustomer: {
-    PartyName: 'Alıcı Firma',
-    PartyIdentification: '9876543210',
-    Alias: 'urn:mail:defaultpk@9876543210'
-  }
-});
-```
-
-## E-Müstahsil Makbuzu
-
-```typescript
-const result = await client.sendProducerReceipt({
-  ProducerReceipt: {
-    ProfileId: 'TEMELMUSTAHSILMAKBUZ',
-    IssueDate: '2024-01-15',
-    SupplierParty: { /* ... */ },
-    CustomerParty: { /* ... */ },
-    DocumentLines: [ /* ... */ ],
-    LegalMonetaryTotal: { /* ... */ }
-  }
-});
-```
-
-## Döviz Kuru Sorgulama
-
-```typescript
-// Tek kur
-const usdRate = await client.getExchangeRate('USD', '2024-01-15');
-console.log('USD:', usdRate.data?.effectiveRate);
-
-// Tüm kurlar
-const allRates = await client.getAllExchangeRates('2024-01-15');
-```
-
-## API Referansı
-
-### EtsClient Metodları
-
-| Metod | Açıklama |
-|-------|----------|
-| `authenticate(credentials)` | Kimlik doğrulama |
-| `setToken(token)` | Token ayarlama |
-| `getToken()` | Token alma |
-| `isAuthenticated()` | Kimlik durumu |
-
-#### E-Fatura
-| Metod | Açıklama |
-|-------|----------|
-| `checkEInvoiceUser(partyId)` | Mükellef sorgulama |
-| `getUserAliases(partyId)` | Alias listesi |
-| `sendInvoice(request)` | Fatura gönderme |
-| `sendDraftInvoice(request)` | Taslak fatura |
-| `getInvoiceStatus(uuid)` | Durum sorgulama |
-| `respondInvoice(uuid, request)` | Yanıt (Kabul/Red) |
-| `getInboxInvoices(query)` | Gelen faturalar |
-| `getInvoicePdf(uuid)` | PDF indirme |
-
-#### E-Arşiv
-| Metod | Açıklama |
-|-------|----------|
-| `sendEArchiveInvoice(request)` | E-Arşiv fatura |
-| `sendEArchiveInvoices(requests)` | Toplu gönderim |
-| `getEArchiveStatus(uuid)` | Durum sorgulama |
-| `cancelEArchive(uuid, date)` | İptal |
-| `getEArchivePdf(uuid)` | PDF indirme |
-| `getEArchiveList(query)` | Liste |
-
-#### E-İrsaliye
-| Metod | Açıklama |
-|-------|----------|
-| `checkEDispatchUser(partyId)` | Mükellef sorgulama |
-| `getDispatchUserAliases(partyId)` | Alias listesi |
-| `sendDispatch(request)` | İrsaliye gönderme |
-| `sendDraftDispatch(request)` | Taslak irsaliye |
-| `getDispatchStatus(uuid)` | Durum sorgulama |
-
-#### E-Müstahsil
-| Metod | Açıklama |
-|-------|----------|
-| `sendProducerReceipt(request)` | Makbuz gönderme |
-| `sendProducerReceipts(requests)` | Toplu gönderim |
-| `getProducerReceiptStatus(uuid)` | Durum sorgulama |
-
-#### Döviz Kuru
-| Metod | Açıklama |
-|-------|----------|
-| `getExchangeRate(currency, date)` | Tek kur |
-| `getAllExchangeRates(date)` | Tüm kurlar |
-
-## İndirim ve Tevkifat
-
-```typescript
-import { createInvoice, WITHHOLDING_CODES } from '@entegre/ets-sdk';
-
-// Satır indirimi
-const invoice = createInvoice()
-  .withSupplier({ taxId: '1234567890', name: 'Satıcı' })
-  .withCustomer({ taxId: '9876543210', name: 'Alıcı' })
-  .addLine({
-    itemCode: '001',
-    itemName: 'Ürün',
-    quantity: 10,
-    price: 100,
-    vatRate: 20,
-    discountRate: 10  // %10 satır indirimi
-  })
-  .build();
-
-// Genel indirim
-const invoiceWithDiscount = createInvoice()
-  .withDiscountAmount(500, 'Kampanya indirimi')  // 500 TL indirim
-  // veya
-  .withDiscountRate(5, 'Yıl sonu indirimi')  // %5 genel indirim
-  .build();
-
-// Tevkifatlı fatura
-const withholdingInvoice = createInvoice()
-  .withSupplier({ taxId: '1234567890', name: 'Satıcı' })
-  .withCustomer({ taxId: '9876543210', name: 'Alıcı' })
-  .withWithholding(90, '603', 'Güvenlik Hizmetleri')  // 9/10 tevkifat
-  .addLine({
-    itemCode: '001',
-    itemName: 'Güvenlik Hizmeti',
-    quantity: 1,
-    price: 10000,
-    vatRate: 20
-  })
-  .build();
-
-// Hesaplanan toplamlar:
-// - Satır toplamı: 10000 TRY
-// - KDV: 2000 TRY
-// - Tevkifat: 1800 TRY (KDV'nin %90'ı)
-// - Ödenecek: 10200 TRY (12000 - 1800)
-
-// Hazır tevkifat kodları
-const codes = WITHHOLDING_CODES.GUVENLIK;  // { code: '603', reason: 'Güvenlik Hizmetleri', rate: 90 }
-```
-
-## Şablonlar (Templates)
+## Hata Yönetimi
 
 ```typescript
 import {
-  salesInvoiceTemplate,
-  returnInvoiceTemplate,
-  withholdingInvoiceTemplate,
-  exportInvoiceTemplate,
-  EXEMPTION_CODES,
-  WITHHOLDING_CODES
+  EtsError,
+  AuthenticationError,
+  AuthorizationError,
+  ValidationError,
+  GibError,
+  GIB_ERROR_CODES
 } from '@entegre/ets-sdk';
 
-// Satış faturası şablonu
-const salesInvoice = salesInvoiceTemplate(
-  { taxId: '1234567890', name: 'Satıcı' },
-  { taxId: '9876543210', name: 'Alıcı' },
-  [{ itemCode: '001', itemName: 'Ürün', quantity: 1, price: 100 }],
-  { date: '2024-01-15', currency: 'TRY' }
-);
+try {
+  await client.sendInvoice(invoice);
+} catch (error) {
+  if (error instanceof AuthenticationError) {
+    // Token geçersiz veya süresi dolmuş
+    console.error('Kimlik doğrulama hatası - yeniden giriş yapın');
 
-// İade faturası
-const returnInvoice = returnInvoiceTemplate(
-  supplier, customer, lines,
-  'ABC2024000000001',  // İade edilen fatura no
-  { date: '2024-01-20' }
-);
+  } else if (error instanceof AuthorizationError) {
+    // Yetkisiz işlem
+    console.error('Bu işlem için yetkiniz yok');
 
-// Tevkifatlı fatura
-const withholding = withholdingInvoiceTemplate(
-  supplier, customer, lines,
-  { withholdingRate: WITHHOLDING_CODES.TEMIZLIK.rate }  // 9/10
-);
+  } else if (error instanceof ValidationError) {
+    // Doğrulama hatası
+    console.error('Doğrulama hatası:', error.fields);
 
-// İhracat faturası
-const exportInv = exportInvoiceTemplate(
-  supplier, customer, lines,
-  { currency: 'USD', deliveryTerms: 'FOB' }
-);
+  } else if (error instanceof GibError) {
+    // GİB'den gelen hata
+    console.error('GİB hatası:', error.gibCode, error.message);
+
+    // Bilinen hata kodları
+    if (error.gibCode === '11603') {
+      console.error('Fatura numarası daha önce kullanılmış');
+    }
+
+  } else if (error instanceof EtsError) {
+    // Genel API hatası
+    console.error('API hatası:', error.message);
+    console.error('HTTP kodu:', error.statusCode);
+  }
+}
 ```
 
-## XML Parser
-
-```typescript
-import { parseInvoiceXml, parseBase64InvoiceXml, toInvoice } from '@entegre/ets-sdk';
-
-// XML string'den parse
-const parsed = parseInvoiceXml(xmlString);
-console.log('UUID:', parsed.uuid);
-console.log('Fatura No:', parsed.invoiceNumber);
-console.log('Satıcı:', parsed.supplier?.PartyName);
-console.log('Toplam:', parsed.totals?.PayableAmount);
-
-// Base64 encoded XML
-const parsedFromBase64 = parseBase64InvoiceXml(base64Content);
-
-// Invoice tipine dönüştürme
-const invoice = toInvoice(parsed);
-```
-
-## Retry Mekanizması
+### Retry Mekanizması
 
 ```typescript
 import { withRetry } from '@entegre/ets-sdk';
 
-// Otomatik yeniden deneme
 const result = await withRetry(
-  () => client.sendInvoice(request),
+  () => client.sendInvoice(invoice),
   {
     maxRetries: 3,
     initialDelay: 1000,
@@ -588,104 +570,276 @@ const result = await withRetry(
 );
 ```
 
-## Rate Limiting
+---
+
+## Webhook Entegrasyonu
+
+Fatura durumu değişikliklerini almak için webhook kullanın.
+
+### Express.js ile
 
 ```typescript
-import { RateLimiter, createRateLimiter, RATE_LIMIT_PRESETS } from '@entegre/ets-sdk';
+import express from 'express';
+import { createWebhookRouter } from '@entegre/ets-sdk';
 
-// Preset kullanarak
-const limiter = createRateLimiter('STANDARD');  // 60 istek/dakika
+const app = express();
+app.use(express.json());
 
-// Özel konfigürasyon
-const customLimiter = new RateLimiter({
-  maxRequests: 100,
-  windowMs: 60 * 1000,  // 1 dakika
-  strategy: 'wait'  // 'throw' veya 'wait'
+const webhookRouter = createWebhookRouter({
+  secret: process.env.WEBHOOK_SECRET,  // Signature doğrulama
+  timestampTolerance: 5 * 60 * 1000    // 5 dakika
 });
 
-// Kullanım
-await limiter.acquire();  // Rate limit bekle
-const result = await client.sendInvoice(request);
+// Event handler'lar
+webhookRouter.on('invoice.sent', async (payload) => {
+  console.log('Fatura gönderildi:', payload.documentUuid);
+  await db.updateInvoiceStatus(payload.documentUuid, 'SENT');
+});
 
-// Veya
-const result = await limiter.execute(() => client.sendInvoice(request));
+webhookRouter.on('invoice.delivered', async (payload) => {
+  console.log('Fatura iletildi:', payload.documentUuid);
+});
+
+webhookRouter.on('invoice.accepted', async (payload) => {
+  console.log('Fatura kabul edildi:', payload.documentUuid);
+});
+
+webhookRouter.on('invoice.rejected', async (payload) => {
+  console.log('Fatura reddedildi:', payload.documentUuid);
+  console.log('Sebep:', payload.errorMessage);
+});
+
+// Tüm fatura event'leri
+webhookRouter.onInvoice(async (payload) => {
+  await notificationService.send(
+    `Fatura ${payload.documentNumber}: ${payload.event}`
+  );
+});
+
+// Middleware olarak kullan
+app.post('/webhook/ets', webhookRouter.middleware());
+
+app.listen(3000);
 ```
 
-## Caching
+### Next.js API Route ile
 
 ```typescript
-import { userCache, exchangeRateCache, MemoryCache } from '@entegre/ets-sdk';
+// pages/api/webhook/ets.ts
+import { createWebhookHandler } from '@entegre/ets-sdk';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
-// Mükellef cache'i (30 dakika varsayılan)
-userCache.cacheUser('1234567890', true, ['alias1', 'alias2']);
-const user = userCache.getUser('1234567890');
+const handler = createWebhookHandler({
+  'invoice.accepted': async (payload) => {
+    await prisma.invoice.update({
+      where: { uuid: payload.documentUuid },
+      data: { status: 'ACCEPTED' }
+    });
+  },
+  'invoice.rejected': async (payload) => {
+    await prisma.invoice.update({
+      where: { uuid: payload.documentUuid },
+      data: { status: 'REJECTED', errorMessage: payload.errorMessage }
+    });
+  }
+}, { secret: process.env.WEBHOOK_SECRET });
 
-// Döviz kuru cache'i (1 saat varsayılan)
-exchangeRateCache.cacheRate('USD', '2024-01-15', 30.5);
-const rate = exchangeRateCache.getRate('USD', '2024-01-15');
-
-// Özel cache
-const myCache = new MemoryCache<MyData>({
-  defaultTtl: 5 * 60 * 1000,  // 5 dakika
-  maxSize: 1000,
-  namespace: 'my-cache'
-});
-
-myCache.set('key', data);
-const cached = myCache.get('key');
-
-// Lazy loading
-const data = await myCache.getOrSet('key', async () => {
-  return await fetchData();
-});
+export default async function webhookHandler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  try {
+    await handler(req.body, req.headers as Record<string, string>);
+    res.status(200).json({ received: true });
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message });
+  }
+}
 ```
 
-## Logging / Debug
+### Event Tipleri
+
+| Event | Açıklama |
+|-------|----------|
+| `invoice.created` | Fatura oluşturuldu |
+| `invoice.sent` | Fatura gönderildi |
+| `invoice.delivered` | Fatura iletildi |
+| `invoice.accepted` | Fatura kabul edildi |
+| `invoice.rejected` | Fatura reddedildi |
+| `invoice.failed` | Fatura başarısız |
+| `archive.created` | E-Arşiv oluşturuldu |
+| `archive.sent` | E-Arşiv gönderildi |
+| `archive.cancelled` | E-Arşiv iptal edildi |
+| `dispatch.created` | İrsaliye oluşturuldu |
+| `dispatch.sent` | İrsaliye gönderildi |
+| `dispatch.delivered` | İrsaliye iletildi |
+
+---
+
+## Toplu İşlemler
+
+### Batch Gönderim
 
 ```typescript
-import { setDebugMode, createLogger, LogLevel, logger } from '@entegre/ets-sdk';
+import { processBatch, BatchInvoiceSender } from '@entegre/ets-sdk';
 
-// Debug modunu aç
-setDebugMode(true);
+// Fatura listesi
+const invoices = [invoice1, invoice2, invoice3, ...];
 
-// Global logger kullan
-logger.debug('Debug mesajı', { extra: 'data' });
-logger.info('Bilgi mesajı');
-logger.warn('Uyarı');
-logger.error('Hata', { error: err });
+// Generic processor
+const results = await processBatch(
+  invoices,
+  async (invoice) => await client.sendInvoice(invoice),
+  {
+    concurrency: 5,           // Paralel işlem sayısı
+    continueOnError: true,    // Hata olsa da devam et
+    retries: 2,               // Başarısız olursa yeniden dene
+    delayBetween: 100,        // İşlemler arası bekleme (ms)
+    onProgress: (completed, total, result) => {
+      const percent = Math.round((completed / total) * 100);
+      console.log(`İlerleme: ${percent}% (${completed}/${total})`);
 
-// Özel logger oluştur
-const myLogger = createLogger('MyModule', {
-  level: LogLevel.DEBUG,
-  maskSensitiveData: true
+      if (!result.success) {
+        console.error(`#${result.index} hata:`, result.error?.message);
+      }
+    }
+  }
+);
+
+// Sonuç özeti
+console.log(`Toplam: ${results.total}`);
+console.log(`Başarılı: ${results.successful}`);
+console.log(`Başarısız: ${results.failed}`);
+console.log(`Süre: ${results.duration}ms`);
+
+// Başarısız olanları listele
+const failed = results.results.filter(r => !r.success);
+failed.forEach(r => {
+  console.error(`Fatura #${r.index}:`, r.error?.message);
 });
 
-myLogger.info('İşlem başladı');
-myLogger.debug('Request', { password: 'secret' });  // password maskelenir
-
-// HTTP logger
-import { HttpLogger } from '@entegre/ets-sdk';
-
-const httpLogger = new HttpLogger();
-httpLogger.request('POST', '/api/invoice', { data });
-httpLogger.response('POST', '/api/invoice', 200, 150, { result });
+// Başarılı UUID'leri al
+const uuids = results.results
+  .filter(r => r.success)
+  .map(r => r.data?.uuid);
 ```
 
-## CLI Aracı
+### Rate Limiting ile
+
+```typescript
+import { createRateLimiter, RATE_LIMIT_PRESETS } from '@entegre/ets-sdk';
+
+const limiter = createRateLimiter(RATE_LIMIT_PRESETS.STANDARD);  // 60/dakika
+
+for (const invoice of invoices) {
+  await limiter.execute(async () => {
+    await client.sendInvoice(invoice);
+  });
+}
+```
+
+---
+
+## Test ve Mock
+
+### Mock Client
+
+```typescript
+import { createMockClient, fixtures, generators } from '@entegre/ets-sdk';
+
+// Test için mock client
+const mockClient = createMockClient({
+  delay: 100,      // API gecikme simülasyonu (ms)
+  errorRate: 0.1   // %10 rastgele hata
+});
+
+// Test kullanıcısı ekle
+mockClient.addTestUser('1234567890', true, ['urn:mail:test@test.com']);
+
+// Normal client gibi kullan
+await mockClient.authenticate({
+  partyId: '1234567890',
+  username: 'test',
+  password: 'test'
+});
+
+const result = await mockClient.sendInvoice(invoice);
+console.log('UUID:', result.data?.uuid);
+
+// Fatura durumunu manuel değiştir (test için)
+mockClient.setInvoiceStatus(uuid, 'ACCEPTED');
+```
+
+### Fixtures
+
+```typescript
+import { fixtures, generators } from '@entegre/ets-sdk';
+
+// Hazır test verileri
+const supplier = fixtures.supplier;
+const customer = fixtures.customer;
+const lines = fixtures.lines;
+
+// Rastgele veri üretimi
+const randomVkn = generators.randomVKN();        // '3847562910'
+const randomTckn = generators.randomTCKN();      // '28374651029'
+const randomDate = generators.randomRecentDate(); // '2024-01-10'
+const randomAmount = generators.randomAmount(100, 10000); // 4523.50
+```
+
+### Vitest ile Test
+
+```typescript
+import { describe, it, expect, beforeEach } from 'vitest';
+import { createMockClient, createInvoice, fixtures } from '@entegre/ets-sdk';
+
+describe('Invoice', () => {
+  let client: ReturnType<typeof createMockClient>;
+
+  beforeEach(() => {
+    client = createMockClient({ delay: 0 });
+  });
+
+  it('should send invoice successfully', async () => {
+    await client.authenticate({
+      partyId: '1234567890',
+      username: 'test',
+      password: 'test'
+    });
+
+    const invoice = createInvoice()
+      .withSupplier(fixtures.supplier)
+      .withCustomer(fixtures.customer)
+      .addLines(fixtures.lines)
+      .build();
+
+    const result = await client.sendInvoice(invoice);
+
+    expect(result.success).toBe(true);
+    expect(result.data?.uuid).toBeDefined();
+  });
+});
+```
+
+---
+
+## CLI Kullanımı
 
 ```bash
-# Kurulum
+# Global kurulum
 npm install -g @entegre/ets-sdk
 
 # Konfigürasyon
 ets-cli config --set baseUrl=https://ets.bulutix.com
 ets-cli config --set integrator=UYM
+ets-cli config --list
 
 # Kimlik doğrulama
 ets-cli auth --party-id 1234567890 --username user --password pass
 
 # Mükellef kontrolü
 ets-cli check-user 9876543210
+ets-cli check-user 9876543210 --json
 
 # Fatura gönderme
 ets-cli send invoice.json
@@ -697,216 +851,275 @@ ets-cli status 12345678-1234-1234-1234-123456789012
 
 # Fatura karşılaştırma
 ets-cli diff invoice1.json invoice2.json
+ets-cli diff invoice1.json invoice2.json --json
 
-# JSON çıktı
-ets-cli check-user 9876543210 --json
+# Yardım
+ets-cli --help
 ```
 
-## Webhook Handler
+---
+
+## Framework Entegrasyonları
+
+### React / Next.js
 
 ```typescript
-import { createWebhookRouter, WebhookRouter } from '@entegre/ets-sdk';
+// hooks/useEtsClient.ts
+import { useState, useCallback } from 'react';
+import { EtsClient, createInvoice, type InvoiceRequest } from '@entegre/ets-sdk';
 
-// Router oluştur
-const router = createWebhookRouter({
-  secret: 'webhook-secret',  // Signature doğrulama için
-  timestampTolerance: 5 * 60 * 1000  // 5 dakika
-});
+const client = new EtsClient({ integrator: 'UYM' });
 
-// Event handler'ları
-router.on('invoice.sent', async (payload) => {
-  console.log('Fatura gönderildi:', payload.documentUuid);
-});
+export function useEtsClient() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
-router.on('invoice.accepted', async (payload) => {
-  console.log('Fatura kabul edildi:', payload.documentUuid);
-});
+  const authenticate = useCallback(async (credentials: {
+    partyId: string;
+    username: string;
+    password: string;
+  }) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await client.authenticate(credentials);
+      if (result.data?.token) {
+        localStorage.setItem('ets_token', result.data.token);
+      }
+      return result;
+    } catch (e) {
+      setError(e as Error);
+      throw e;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-router.on('invoice.rejected', async (payload) => {
-  console.log('Fatura reddedildi:', payload.documentUuid, payload.errorMessage);
-});
+  const sendInvoice = useCallback(async (invoice: InvoiceRequest) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('ets_token');
+      if (token) client.setToken(token);
+      return await client.sendInvoice(invoice);
+    } catch (e) {
+      setError(e as Error);
+      throw e;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-// Tüm fatura event'leri için
-router.onInvoice(async (payload) => {
-  console.log('Fatura event:', payload.event, payload.documentUuid);
-});
-
-// Wildcard handler
-router.on('*', async (payload) => {
-  console.log('Tüm eventler:', payload.event);
-});
-
-// Express middleware olarak kullan
-app.post('/webhook', router.middleware());
-
-// Manuel kullanım
-const payload = await router.handle(requestBody, requestHeaders);
+  return { authenticate, sendInvoice, loading, error, client };
+}
 ```
 
-## Batch İşlemler
+```tsx
+// components/InvoiceForm.tsx
+import { useEtsClient } from '../hooks/useEtsClient';
+import { createInvoice } from '@entegre/ets-sdk';
+
+export function InvoiceForm() {
+  const { sendInvoice, loading, error } = useEtsClient();
+
+  const handleSubmit = async (formData: FormData) => {
+    const invoice = createInvoice()
+      .withSupplier({
+        taxId: formData.get('supplierTaxId') as string,
+        name: formData.get('supplierName') as string,
+      })
+      .withCustomer({
+        taxId: formData.get('customerTaxId') as string,
+        name: formData.get('customerName') as string,
+      })
+      .addLine({
+        itemCode: formData.get('itemCode') as string,
+        itemName: formData.get('itemName') as string,
+        quantity: Number(formData.get('quantity')),
+        price: Number(formData.get('price')),
+      })
+      .build();
+
+    const result = await sendInvoice(invoice);
+    alert(`Fatura gönderildi: ${result.data?.uuid}`);
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {/* Form fields */}
+      <button type="submit" disabled={loading}>
+        {loading ? 'Gönderiliyor...' : 'Fatura Gönder'}
+      </button>
+      {error && <p className="error">{error.message}</p>}
+    </form>
+  );
+}
+```
+
+### Vue.js
 
 ```typescript
-import { processBatch, BatchInvoiceSender, createBatchSender } from '@entegre/ets-sdk';
+// composables/useEts.ts
+import { ref } from 'vue';
+import { EtsClient, createInvoice } from '@entegre/ets-sdk';
 
-// Generic batch processor
-const results = await processBatch(
-  invoices,
-  async (invoice, index) => {
-    return await client.sendInvoice(invoice);
-  },
-  {
-    concurrency: 5,           // Paralel işlem sayısı
-    continueOnError: true,    // Hata olsa da devam et
-    retries: 2,               // Yeniden deneme
-    onProgress: (completed, total, result) => {
-      console.log(`İlerleme: ${completed}/${total}`);
+const client = new EtsClient({ integrator: 'UYM' });
+
+export function useEts() {
+  const loading = ref(false);
+  const error = ref<Error | null>(null);
+
+  async function authenticate(partyId: string, username: string, password: string) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const result = await client.authenticate({ partyId, username, password });
+      return result;
+    } catch (e) {
+      error.value = e as Error;
+      throw e;
+    } finally {
+      loading.value = false;
     }
   }
-);
 
-console.log(`Başarılı: ${results.successful}/${results.total}`);
-console.log(`Toplam süre: ${results.duration}ms`);
+  async function sendInvoice(invoiceData: Parameters<typeof createInvoice>[0]) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const invoice = createInvoice()
+        .withSupplier(invoiceData.supplier)
+        .withCustomer(invoiceData.customer)
+        .addLines(invoiceData.lines)
+        .build();
+      return await client.sendInvoice(invoice);
+    } catch (e) {
+      error.value = e as Error;
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
 
-// Hatalı olanları göster
-results.results
-  .filter(r => !r.success)
-  .forEach(r => console.error(`#${r.index} hata:`, r.error?.message));
-
-// BatchInvoiceSender
-const batchSender = new BatchInvoiceSender(
-  (req) => client.sendInvoice(req),
-  { concurrency: 3 }
-);
-
-const batchResult = await batchSender.send(invoices);
+  return { authenticate, sendInvoice, loading, error };
+}
 ```
 
-## Test / Mock
+### NestJS
 
 ```typescript
-import { createMockClient, fixtures, generators, assertions } from '@entegre/ets-sdk';
+// ets.module.ts
+import { Module, Global } from '@nestjs/common';
+import { EtsService } from './ets.service';
 
-// Mock client oluştur
-const mockClient = createMockClient({
-  delay: 100,      // API gecikme simülasyonu
-  errorRate: 0.1   // %10 hata oranı
-});
+@Global()
+@Module({
+  providers: [EtsService],
+  exports: [EtsService],
+})
+export class EtsModule {}
 
-// Test kullanıcısı ekle
-mockClient.addTestUser('1234567890', true, ['alias1']);
+// ets.service.ts
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { EtsClient, createInvoice, type InvoiceRequest } from '@entegre/ets-sdk';
 
-// Normal client gibi kullan
-await mockClient.authenticate({
-  partyId: '1234567890',
-  username: 'test',
-  password: 'test'
-});
+@Injectable()
+export class EtsService implements OnModuleInit {
+  private client: EtsClient;
 
-const result = await mockClient.sendInvoice(request);
-console.log('UUID:', result.data?.uuid);
+  constructor(private config: ConfigService) {
+    this.client = new EtsClient({
+      baseUrl: this.config.get('ETS_BASE_URL'),
+      integrator: this.config.get('ETS_INTEGRATOR'),
+    });
+  }
 
-// Hazır test verileri
-const supplier = fixtures.supplier;
-const customer = fixtures.customer;
-const lines = fixtures.lines;
+  async onModuleInit() {
+    await this.client.authenticate({
+      partyId: this.config.get('ETS_PARTY_ID'),
+      username: this.config.get('ETS_USERNAME'),
+      password: this.config.get('ETS_PASSWORD'),
+    });
+  }
 
-// Test data generator
-const randomVkn = generators.randomVKN();
-const randomDate = generators.randomRecentDate();
-const randomAmount = generators.randomAmount(100, 10000);
+  async sendInvoice(request: InvoiceRequest) {
+    return this.client.sendInvoice(request);
+  }
 
-// Assertions
-const isValid = assertions.isValidInvoiceRequest(request);
-const totalsCorrect = assertions.areTotalsCorrect(request);
-```
+  async checkUser(taxId: string) {
+    return this.client.checkEInvoiceUser(taxId);
+  }
 
-## Fatura Karşılaştırma (Diff)
-
-```typescript
-import { diffInvoices, formatDiff, formatDiffHtml } from '@entegre/ets-sdk';
-
-// İki faturayı karşılaştır
-const result = diffInvoices(oldInvoice, newInvoice, {
-  ignoreFields: ['Notes', 'IssueDate'],  // Bu alanları ignore et
-  ignoreLineOrder: true,                  // Satır sırasını ignore et
-  floatTolerance: 0.01                    // Sayı karşılaştırma toleransı
-});
-
-if (result.identical) {
-  console.log('Faturalar aynı');
-} else {
-  console.log(`${result.changeCount} değişiklik bulundu`);
-  console.log('Header:', result.summary.headerChanges);
-  console.log('Satırlar:', result.summary.lineChanges);
-  console.log('Toplamlar:', result.summary.totalChanges);
-
-  // Detaylı değişiklikler
-  result.changes.forEach(change => {
-    console.log(`${change.type}: ${change.path}`);
-    console.log(`  Eski: ${JSON.stringify(change.oldValue)}`);
-    console.log(`  Yeni: ${JSON.stringify(change.newValue)}`);
-  });
+  createInvoiceBuilder() {
+    return createInvoice();
+  }
 }
 
-// Okunabilir format
-console.log(formatDiff(result));
+// invoice.controller.ts
+import { Controller, Post, Body } from '@nestjs/common';
+import { EtsService } from './ets.service';
 
-// HTML format
-const html = formatDiffHtml(result);
+@Controller('invoices')
+export class InvoiceController {
+  constructor(private ets: EtsService) {}
+
+  @Post()
+  async create(@Body() dto: CreateInvoiceDto) {
+    const invoice = this.ets.createInvoiceBuilder()
+      .withSupplier(dto.supplier)
+      .withCustomer(dto.customer)
+      .addLines(dto.lines)
+      .build();
+
+    return this.ets.sendInvoice(invoice);
+  }
+}
 ```
+
+---
 
 ## Sabitler
 
 ```typescript
-import { UNIT_CODES, TAX_CODES, INVOICE_TYPES, INVOICE_PROFILES } from '@entegre/ets-sdk';
+import {
+  UNIT_CODES,
+  TAX_CODES,
+  INVOICE_TYPES,
+  INVOICE_PROFILES,
+  CURRENCIES,
+  INTEGRATORS
+} from '@entegre/ets-sdk';
 
 // Birim kodları
-UNIT_CODES.ADET      // 'C62'
-UNIT_CODES.KILOGRAM  // 'KGM'
-UNIT_CODES.LITRE     // 'LTR'
+UNIT_CODES.ADET       // 'C62'
+UNIT_CODES.KILOGRAM   // 'KGM'
+UNIT_CODES.LITRE      // 'LTR'
+UNIT_CODES.METRE      // 'MTR'
+UNIT_CODES.METREKARE  // 'MTK'
+UNIT_CODES.SAAT       // 'HUR'
+UNIT_CODES.GUN        // 'DAY'
+UNIT_CODES.AY         // 'MON'
 
 // Vergi kodları
-TAX_CODES.KDV        // '0015'
-TAX_CODES.OTV_I      // '0003'
+TAX_CODES.KDV          // '0015'
+TAX_CODES.KDV_TEVKIFAT // '9015'
+TAX_CODES.OTV_I        // '0003'
+TAX_CODES.STOPAJ       // '0003'
 
-// Fatura tipleri
-INVOICE_TYPES.SATIS       // 'SATIS'
-INVOICE_TYPES.IADE        // 'IADE'
-INVOICE_TYPES.TEVKIFAT    // 'TEVKIFAT'
-
-// Fatura profilleri
-INVOICE_PROFILES.TEMEL    // 'TEMELFATURA'
-INVOICE_PROFILES.TICARI   // 'TICARIFATURA'
+// Para birimleri
+CURRENCIES.TRY  // 'TRY'
+CURRENCIES.USD  // 'USD'
+CURRENCIES.EUR  // 'EUR'
 ```
 
-## Hata Yönetimi
+---
 
-```typescript
-import { EtsError, AuthenticationError, GibError } from '@entegre/ets-sdk';
+## Destek
 
-try {
-  await client.sendInvoice(request);
-} catch (error) {
-  if (error instanceof AuthenticationError) {
-    console.error('Kimlik doğrulama hatası');
-  } else if (error instanceof GibError) {
-    console.error('GİB hatası:', error.gibCode);
-  } else if (error instanceof EtsError) {
-    console.error('API hatası:', error.message);
-    console.error('HTTP kodu:', error.statusCode);
-  }
-}
-```
-
-## Entegratörler
-
-| Kod | Entegratör |
-|-----|------------|
-| `UYM` | Uyumsoft |
-| `UYK` | Uyumsoft Kurumsal |
-| `IZI` | İzibiz |
-| `DGN` | Doğan E-Dönüşüm |
-| `MYS` | Mysoft |
+- 📖 [API Dokümantasyonu](https://github.com/Entegre/entegre-ets-sdk)
+- 🐛 [Hata Bildirimi](https://github.com/Entegre/entegre-ets-sdk/issues)
+- 📧 destek@entegre.com
 
 ## Lisans
 
