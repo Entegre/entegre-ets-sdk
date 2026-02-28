@@ -42,14 +42,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Entegre/entegre-ets-sdk.git"
+    "url": "https://github.com/Entegre/ets-sdk.git"
   },
-  "homepage": "https://github.com/Entegre/entegre-ets-sdk#readme",
+  "homepage": "https://github.com/Entegre/ets-sdk#readme",
   "bugs": {
-    "url": "https://github.com/Entegre/entegre-ets-sdk/issues"
-  },
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "url": "https://github.com/Entegre/ets-sdk/issues"
   },
   "dependencies": {
     "axios": "^1.6.0"
