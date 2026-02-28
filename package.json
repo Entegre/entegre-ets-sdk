@@ -1,0 +1,63 @@
+{
+  "name": "@entegre/ets-sdk",
+  "version": "1.0.0",
+  "description": "Entegre ETS API SDK - E-Fatura, E-Arsiv, E-Irsaliye, E-Mustahsil için TypeScript/JavaScript SDK",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "efatura",
+    "e-fatura",
+    "e-arsiv",
+    "e-irsaliye",
+    "e-mustahsil",
+    "gib",
+    "turkey",
+    "invoice",
+    "turkish-tax",
+    "ubl-tr",
+    "entegre"
+  ],
+  "author": "Entegre Yazilim",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Entegre/ets-sdk.git"
+  },
+  "homepage": "https://github.com/Entegre/ets-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/Entegre/ets-sdk/issues"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
