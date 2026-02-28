@@ -78,3 +78,13 @@ export type {
 } from './incoming';
 
 export { INCOMING_INVOICE_STATUS } from './incoming';
+
+// Auto-routing types
+export type {
+  DocumentTypeRoute,
+  AutoRouteResult,
+  AutoRouteOptions,
+  BulkStatusQuery,
+  BulkStatusOptions,
+  BulkStatusResult,
+} from './auto-route';

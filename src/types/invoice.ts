@@ -39,6 +39,8 @@ export interface Invoice {
   DocumentCurrencyCode?: string;
   /** Para birimi ID */
   CurrencyId?: string;
+  /** Döviz kuru (yabancı para birimleri için) */
+  ExchangeRate?: number;
   /** Fatura notları */
   Notes?: string[];
   /** Gönderici bilgileri */

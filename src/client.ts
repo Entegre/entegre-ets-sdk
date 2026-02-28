@@ -28,7 +28,13 @@ import type {
   IncomingInvoiceListResponse,
   InvoiceResponseRequest,
   InvoiceResponseResult,
+  AutoRouteResult,
+  AutoRouteOptions,
+  BulkStatusQuery,
+  BulkStatusOptions,
+  BulkStatusResult,
 } from './types';
+import { parallelLimit } from './batch';
 
 /**
  * Entegre ETS API Client
@@ -457,6 +463,189 @@ export class EtsClient {
   async getAllExchangeRates(date?: string): Promise<ApiResponse<ExchangeRate[]>> {
     const params = date ? `?date=${date}` : '';
     return this.get(`/currency/rates${params}`);
+  }
+
+  // ==================== AKILLI YÖNLENDIRME ====================
+
+  /**
+   * Faturayı akıllı yönlendirme ile gönderir.
+   *
+   * Alıcının e-fatura mükellefi olup olmadığını kontrol eder ve
+   * otomatik olarak e-fatura veya e-arşiv olarak gönderir.
+   *
+   * @param request - Fatura isteği
+   * @param options - Yönlendirme seçenekleri
+   *
+   * @example
+   * ```typescript
+   * // Otomatik yönlendirme
+   * const result = await client.sendInvoiceAuto(invoiceRequest);
+   * console.log('Belge tipi:', result.data?.documentType); // 'EFATURA' veya 'EARSIV'
+   *
+   * // E-Arşiv'e zorla
+   * const archiveResult = await client.sendInvoiceAuto(invoiceRequest, {
+   *   forceType: 'EARSIV',
+   *   archiveSendingType: 'KAGIT'
+   * });
+   * ```
+   */
+  async sendInvoiceAuto(
+    request: InvoiceRequest,
+    options: AutoRouteOptions = {}
+  ): Promise<ApiResponse<AutoRouteResult>> {
+    // Alıcı VKN/TCKN'sini belirle
+    const recipientTaxId = request.TargetCustomer?.PartyIdentification
+      || request.Invoice.CustomerParty.PartyIdentification;
+
+    if (!recipientTaxId) {
+      return {
+        success: false,
+        message: 'Alıcı VKN/TCKN bilgisi bulunamadı',
+      };
+    }
+
+    let isEInvoiceUser = false;
+    let documentType: 'EFATURA' | 'EARSIV';
+
+    // Zorlanmış tip varsa direkt kullan
+    if (options.forceType) {
+      documentType = options.forceType;
+      isEInvoiceUser = options.forceType === 'EFATURA';
+    } else {
+      // E-fatura mükellefi mi kontrol et
+      try {
+        const userCheck = await this.checkEInvoiceUser(recipientTaxId);
+        isEInvoiceUser = userCheck.data?.isActive ?? false;
+      } catch {
+        // Kontrol başarısız olursa e-arşiv olarak gönder
+        isEInvoiceUser = false;
+      }
+      documentType = isEInvoiceUser ? 'EFATURA' : 'EARSIV';
+    }
+
+    // Faturayı gönder
+    let result: ApiResponse<InvoiceResult>;
+
+    if (documentType === 'EFATURA') {
+      result = await this.sendInvoice(request);
+    } else {
+      // E-Arşiv için ArchiveInfo ekle
+      const archiveRequest: ArchiveInvoiceRequest = {
+        ...request,
+        ArchiveInfo: {
+          SendingType: options.archiveSendingType || 'ELEKTRONIK',
+          IsInternetSales: options.isInternetSales,
+        },
+      };
+      result = await this.sendEArchiveInvoice(archiveRequest);
+    }
+
+    if (!result.success || !result.data) {
+      return {
+        success: false,
+        message: result.message,
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        uuid: result.data.uuid || '',
+        invoiceNumber: result.data.invoiceNumber,
+        documentType,
+        isEInvoiceRecipient: isEInvoiceUser,
+        result: result.data,
+      },
+    };
+  }
+
+  /**
+   * Birden fazla faturanın durumunu paralel olarak sorgular.
+   *
+   * @param query - Sorgu parametreleri
+   * @param options - Sorgu seçenekleri
+   *
+   * @example
+   * ```typescript
+   * const results = await client.getBulkStatus({
+   *   uuids: ['uuid1', 'uuid2', 'uuid3'],
+   *   includeEArchive: true
+   * });
+   *
+   * for (const result of results.data || []) {
+   *   console.log(`${result.uuid}: ${result.status?.status} (${result.documentType})`);
+   * }
+   * ```
+   */
+  async getBulkStatus(
+    query: BulkStatusQuery,
+    options: BulkStatusOptions = {}
+  ): Promise<ApiResponse<BulkStatusResult[]>> {
+    const concurrency = options.concurrency ?? 5;
+    const includeEArchive = query.includeEArchive ?? true;
+    const retries = options.retries ?? 1;
+
+    const processUuid = async (uuid: string): Promise<BulkStatusResult> => {
+      let lastError: string | undefined;
+
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          // Önce e-fatura durumunu sorgula
+          const efaturaResult = await this.getInvoiceStatus(uuid);
+          if (efaturaResult.success && efaturaResult.data) {
+            return {
+              uuid,
+              documentType: 'EFATURA',
+              status: efaturaResult.data,
+              success: true,
+            };
+          }
+        } catch {
+          // E-fatura'da bulunamadı, e-arşiv'i dene
+        }
+
+        if (includeEArchive) {
+          try {
+            const earsivResult = await this.getEArchiveStatus(uuid);
+            if (earsivResult.success && earsivResult.data) {
+              return {
+                uuid,
+                documentType: 'EARSIV',
+                status: earsivResult.data,
+                success: true,
+              };
+            }
+          } catch (error) {
+            lastError = error instanceof Error ? error.message : String(error);
+          }
+        }
+
+        // Retry için bekle
+        if (attempt < retries) {
+          await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+        }
+      }
+
+      return {
+        uuid,
+        success: false,
+        error: lastError || 'Belge bulunamadı',
+      };
+    };
+
+    try {
+      const results = await parallelLimit(query.uuids, concurrency, processUuid);
+
+      return {
+        success: true,
+        data: results,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Toplu sorgu başarısız',
+      };
+    }
   }
 
   // ==================== PRIVATE METHODS ====================

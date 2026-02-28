@@ -11,6 +11,7 @@ import type {
   Person,
 } from '../types';
 import { TAX_CODES, UNIT_CODES } from '../constants';
+import { tcmb } from '../tcmb';
 
 /**
  * Satır ekleme için basitleştirilmiş tip
@@ -176,6 +177,7 @@ export class InvoiceBuilder {
   private isDraft: boolean = false;
   private withholding?: WithholdingInfo;
   private generalDiscount?: DiscountInfo;
+  private exchangeRate?: number;
 
   private constructor() {
     // Varsayılan tarih: bugün
@@ -230,6 +232,70 @@ export class InvoiceBuilder {
    */
   withCurrency(currency: string): InvoiceBuilder {
     this.currency = currency;
+    return this;
+  }
+
+  /**
+   * Döviz kurunu manuel olarak belirler
+   * @param rate - Döviz kuru
+   */
+  withExchangeRate(rate: number): InvoiceBuilder {
+    this.exchangeRate = rate;
+    return this;
+  }
+
+  /**
+   * TCMB'den otomatik döviz kuru çeker ve ayarlar
+   *
+   * Fatura para birimi TRY ise kur 1 olarak ayarlanır.
+   * Diğer para birimleri için TCMB döviz satış kuru kullanılır.
+   *
+   * @param currencyCode - Para birimi kodu (opsiyonel, varsayılan: fatura para birimi)
+   * @param date - Kur tarihi (opsiyonel, varsayılan: fatura tarihi veya bugün)
+   *
+   * @example
+   * ```typescript
+   * const invoice = await InvoiceBuilder.create()
+   *   .withCurrency('USD')
+   *   .withDate('2024-01-15')
+   *   .withAutoExchangeRate()
+   *   .then(builder => builder
+   *     .withSupplier({ taxId: '1234567890', name: 'Satıcı' })
+   *     .withCustomer({ taxId: '9876543210', name: 'Alıcı' })
+   *     .addLine({ itemCode: 'PRD', itemName: 'Ürün', quantity: 1, price: 100 })
+   *     .build()
+   *   );
+   * ```
+   *
+   * @returns Promise<InvoiceBuilder> - Zincirleme için builder döner
+   */
+  async withAutoExchangeRate(currencyCode?: string, date?: Date): Promise<InvoiceBuilder> {
+    const currency = currencyCode || this.currency;
+
+    // TRY için kur 1
+    if (currency === 'TRY') {
+      this.exchangeRate = 1;
+      return this;
+    }
+
+    // Kur tarihi: parametre > fatura tarihi > bugün
+    let rateDate: Date;
+    if (date) {
+      rateDate = date;
+    } else if (this.issueDate) {
+      rateDate = new Date(this.issueDate);
+    } else {
+      rateDate = new Date();
+    }
+
+    // TCMB'den kur çek
+    const rate = await tcmb.getInvoiceRate(currency, rateDate);
+    this.exchangeRate = rate;
+
+    // Kur notu ekle
+    const dateStr = rateDate.toISOString().split('T')[0];
+    this.withNote(`Döviz Kuru: 1 ${currency} = ${rate.toFixed(4)} TRY (TCMB ${dateStr})`);
+
     return this;
   }
 
@@ -483,6 +549,7 @@ export class InvoiceBuilder {
       IssueDate: this.issueDate,
       DocumentCurrencyCode: this.currency,
       CurrencyId: this.currency,
+      ExchangeRate: this.exchangeRate,
       Notes: this.notes.length > 0 ? this.notes : undefined,
       SupplierParty: this.supplier!,
       CustomerParty: this.customer!,

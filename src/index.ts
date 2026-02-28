@@ -116,6 +116,14 @@ export type {
   InvoiceResponseRequest,
   InvoiceResponseResult,
   IncomingInvoiceStatus,
+
+  // Auto-routing
+  DocumentTypeRoute,
+  AutoRouteResult,
+  AutoRouteOptions,
+  BulkStatusQuery,
+  BulkStatusOptions,
+  BulkStatusResult,
 } from './types';
 
 // Incoming Invoice Status Constants
@@ -178,6 +186,27 @@ export {
   type FieldError,
   type ValidationResult,
 } from './validation';
+
+// Invoice Validation
+export {
+  validateInvoice,
+  isValidInvoice,
+  formatValidationResult,
+  VALIDATION_ERROR_CODES,
+  type InvoiceValidationResult,
+  type InvoiceValidationOptions,
+  type InvoiceValidationRule,
+} from './validation/invoice-validator';
+
+// TCMB Exchange Rates
+export {
+  TcmbService,
+  tcmb,
+  createTcmbService,
+  type TcmbRate,
+  type TcmbRatesResult,
+  type TcmbServiceConfig,
+} from './tcmb';
 
 // Templates
 export {
