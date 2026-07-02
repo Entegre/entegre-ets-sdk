@@ -142,4 +142,6 @@ export const INTEGRATORS = {
   IZIBIZ: 'IZI',
   /** Doğan E-Dönüşüm */
   DOGAN: 'DGN',
+  /** Turkcell e-Şirket */
+  TURKCELL: 'TRC',
 } as const;

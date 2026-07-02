@@ -104,6 +104,7 @@ console.log('UUID:', result.data?.uuid);
 | `UYK` | Uyumsoft Kurumsal |
 | `IZI` | İzibiz |
 | `DGN` | Doğan E-Dönüşüm |
+| `TRC` | Turkcell e-Şirket |
 
 ### Fatura Tipleri
 
