@@ -287,7 +287,6 @@ try {
 | `UYK` | Uyumsoft Kurumsal |
 | `IZI` | İzibiz |
 | `DGN` | Doğan E-Dönüşüm |
-| `MYS` | Mysoft |
 
 ## Lisans
 

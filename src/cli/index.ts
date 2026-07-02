@@ -243,7 +243,7 @@ async function handleAuth(flags: Record<string, string | boolean>): Promise<void
 
   const client = new EtsClient({
     baseUrl: config.baseUrl,
-    integrator: config.integrator as 'UYM' | 'UYK' | 'IZI' | 'DGN' | 'MYS',
+    integrator: config.integrator as 'UYM' | 'UYK' | 'IZI' | 'DGN',
   });
 
   try {
@@ -277,7 +277,7 @@ async function handleCheckUser(vkn: string, flags: Record<string, string | boole
 
   const client = new EtsClient({
     baseUrl: config.baseUrl,
-    integrator: config.integrator as 'UYM' | 'UYK' | 'IZI' | 'DGN' | 'MYS',
+    integrator: config.integrator as 'UYM' | 'UYK' | 'IZI' | 'DGN',
   });
 
   if (config.token) {
@@ -324,7 +324,7 @@ async function handleSend(file: string, flags: Record<string, string | boolean>)
 
   const client = new EtsClient({
     baseUrl: config.baseUrl,
-    integrator: config.integrator as 'UYM' | 'UYK' | 'IZI' | 'DGN' | 'MYS',
+    integrator: config.integrator as 'UYM' | 'UYK' | 'IZI' | 'DGN',
   });
   client.setToken(config.token);
 
@@ -376,7 +376,7 @@ async function handleStatus(uuid: string, flags: Record<string, string | boolean
 
   const client = new EtsClient({
     baseUrl: config.baseUrl,
-    integrator: config.integrator as 'UYM' | 'UYK' | 'IZI' | 'DGN' | 'MYS',
+    integrator: config.integrator as 'UYM' | 'UYK' | 'IZI' | 'DGN',
   });
   client.setToken(config.token);
 

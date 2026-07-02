@@ -1,7 +1,7 @@
 /**
  * Entegratör kodları
  */
-export type Integrator = 'UYM' | 'UYK' | 'IZI' | 'DGN' | 'MYS';
+export type Integrator = 'UYM' | 'UYK' | 'IZI' | 'DGN';
 
 /**
  * API istek ayarları
